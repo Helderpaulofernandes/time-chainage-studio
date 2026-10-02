@@ -50,25 +50,83 @@ export function renderPage(p, { selected = null, forPrint = false } = {}) {
         o += `<text x="${cx + 1.2}" y="${cy + rh - Math.min(1.4, rh * .2)}" font-size="${Math.min(3.4, rh * .45)}" fill="#18262B">${esc(clip(v || "", cw / (Math.min(3.4, rh * .45) * .5)))}</text>`;
       });
     } else {
-      const fsz = (b.font_size || 12) * 0.3528; // pt -> mm
-      const lines = fillText(b.text, p).split("\n");
-      lines.forEach((ln, i) => {
-        const ty = y + 1.5 + fsz * (i + 1) * 1.25;
-        if (ty > y + hh) return;
-        o += `<text x="${x + 1.5}" y="${ty}" font-size="${fsz}" font-weight="${b.bold ? 700 : 400}" fill="#18262B">${esc(clip(ln, w / (fsz * .48)))}</text>`;
+      const L = layoutText(b, p, w, hh);
+      let ty = y + PAD;
+      if (L.head) {
+        ty += L.headSize;
+        o += `<text x="${x + PAD}" y="${ty}" font-size="${L.headSize}" font-weight="700" letter-spacing=".15" fill="#18262B">${esc(L.head)}</text>`;
+        ty += L.headSize * 0.45;
+        o += `<line x1="${x + PAD}" x2="${x + w - PAD}" y1="${ty}" y2="${ty}" stroke="#18262B" stroke-width=".2"/>`;
+        ty += L.headSize * 0.35;
+      }
+      L.lines.forEach(ln => {
+        ty += L.fsz * LINE;
+        o += `<text x="${x + PAD}" y="${ty}" font-size="${L.fsz}" font-weight="${b.bold ? 700 : 400}" fill="#18262B" xml:space="preserve">${esc(ln)}</text>`;
       });
+      if (L.hidden && !forPrint) o += `<text x="${x + w - PAD}" y="${y + hh - 1}" font-size="2.4" text-anchor="end" fill="#B13A3A">+${L.hidden} more lines</text>`;
+      overflow[b.id] = L.hidden;
     }
     if (b.border) o += `<rect x="${x}" y="${y}" width="${w}" height="${hh}" fill="none" stroke="#18262B" stroke-width=".3"/>`;
     if (!forPrint) {
       o += `<rect class="blk" data-block="${b.id}" x="${x}" y="${y}" width="${w}" height="${hh}" fill="transparent" stroke="${selected === b.id ? PAPER.sel : "transparent"}" stroke-width=".8"/>`;
       if (selected === b.id) o += `<rect data-resize="${b.id}" x="${x + w - 3}" y="${y + hh - 3}" width="6" height="6" fill="${PAPER.sel}"/>`;
-      o += `<text x="${x + 1}" y="${y - 1}" font-size="2.2" fill="#9AA5A8" pointer-events="none">${esc(b.kind)}</text>`;
+      o += `<text x="${x + 1}" y="${y - 1}" font-size="2.2" fill="#9AA5A8" pointer-events="none">${esc(blockName(b))}</text>`;
     }
     o += `</g>`;
   }
   return o + "</svg>";
 }
 const clip = (s, n) => (String(s).length > n ? String(s).slice(0, Math.max(1, Math.floor(n) - 1)) + "…" : String(s));
+
+// ------------------------------------------------------------------ text blocks: heading, word wrap, shrink to fit
+const PAD = 1.5, LINE = 1.25, PT = 0.3528; // mm padding, line spacing, mm per point
+const overflow = {}; // block id -> lines that did not fit at the last draw
+const KIND_NAMES = { text: "Text", title: "Title", legend: "Legend", titleblock: "Title block", chart: "Chart", image: "Image" };
+export const blockName = b => (b.title || "").trim() || KIND_NAMES[b.kind] || b.kind;
+let measureCtx = null;
+function textWidthMm(s, sizeMm, bold) {
+  if (!measureCtx) measureCtx = document.createElement("canvas").getContext("2d");
+  measureCtx.font = `${bold ? 700 : 400} 100px "IBM Plex Sans Condensed", "Arial Narrow", Arial, sans-serif`;
+  return (measureCtx.measureText(s).width / 100) * sizeMm;
+}
+function wrap(text, maxMm, sizeMm, bold) {
+  const out = [];
+  for (const para of String(text).split("\n")) {
+    if (!para.trim()) { out.push(""); continue; }
+    let line = "";
+    for (const word of para.split(/\s+/).filter(Boolean)) {
+      const tryLine = line ? line + " " + word : word;
+      if (textWidthMm(tryLine, sizeMm, bold) <= maxMm) { line = tryLine; continue; }
+      if (line) out.push(line);
+      // a single word wider than the block is broken across lines
+      let w = word;
+      while (textWidthMm(w, sizeMm, bold) > maxMm && w.length > 1) {
+        let n = w.length - 1;
+        while (n > 1 && textWidthMm(w.slice(0, n) + "-", sizeMm, bold) > maxMm) n--;
+        out.push(w.slice(0, n) + "-"); w = w.slice(n);
+      }
+      line = w;
+    }
+    out.push(line);
+  }
+  return out;
+}
+export function layoutText(b, p, w, hh) {
+  const showHead = b.kind === "text" && b.show_title !== false && (b.title || "").trim();
+  const base = (b.font_size || 12) * PT;
+  const maxW = Math.max(1, w - 2 * PAD);
+  let fsz = base, lines, avail, headSize = 0;
+  for (let i = 0; i < 40; i++) {
+    headSize = showHead ? fsz * 1.1 : 0;
+    avail = hh - 2 * PAD - (showHead ? headSize * 1.8 : 0);
+    lines = wrap(fillText(b.text, p), maxW, fsz, b.bold);
+    if (!b.shrink || lines.length * fsz * LINE <= avail || fsz <= 1.4) break;
+    fsz *= 0.94;
+  }
+  const fit = Math.max(0, Math.floor(avail / (fsz * LINE)));
+  return { head: showHead ? b.title.trim().toUpperCase() : "", headSize, fsz, lines: lines.slice(0, fit), hidden: Math.max(0, lines.length - fit),
+    shrunkPt: Math.round((fsz / PT) * 10) / 10 };
+}
 
 // ------------------------------------------------------------------ page layout view controller
 export function pageView(app) {
@@ -91,7 +149,7 @@ export function pageView(app) {
       lbl("Orientation", selEl(["landscape", "portrait"], pg.orientation, v => set("orientation", v))),
       h("div", { class: "row2" }, ...["top", "right", "bottom", "left"].map(k => lbl(`Margin ${k} (mm)`, numEl(pg.margins_mm[k], v => { app.commit(); pg.margins_mm[k] = v; app.changed(false); draw(); })))));
     const b = pg.blocks.find(x => x.id === sel);
-    panel.append(h("h3", {}, b ? `Block: ${b.kind}` : "Blocks"));
+    panel.append(h("h3", {}, b ? `Block: ${blockName(b)}` : "Blocks"));
     if (!b) panel.append(h("p", { class: "hint" }, "Click a block on the page to move it, resize it from its corner, or edit it here. Text blocks accept {title}, {subtitle}, {client}, {contract}, {revision}, {author}, {date}, {dataset}."));
     if (b) {
       const upd = (k, v) => { app.commit(); b[k] = v; app.changed(false); draw(); };
@@ -99,8 +157,18 @@ export function pageView(app) {
         lbl("Left (%)", numEl(+(b.x * 100).toFixed(1), v => upd("x", clamp(v / 100, 0, 1)))), lbl("Top (%)", numEl(+(b.y * 100).toFixed(1), v => upd("y", clamp(v / 100, 0, 1)))),
         lbl("Width (%)", numEl(+(b.w * 100).toFixed(1), v => upd("w", clamp(v / 100, 0.02, 1)))), lbl("Height (%)", numEl(+(b.h * 100).toFixed(1), v => upd("h", clamp(v / 100, 0.02, 1))))),
         h("label", { class: "chk" }, h("input", { type: "checkbox", checked: !!b.border, onchange: e => upd("border", e.target.checked) }), " Border"));
-      if (b.kind === "text" || b.kind === "title") panel.append(lbl("Text", h("textarea", { rows: 5, onchange: e => upd("text", e.target.value) }, b.text || "")),
-        h("div", { class: "row2" }, lbl("Font size (pt)", numEl(b.font_size || 12, v => upd("font_size", v))), h("label", { class: "chk" }, h("input", { type: "checkbox", checked: !!b.bold, onchange: e => upd("bold", e.target.checked) }), " Bold")));
+      panel.append(lbl("Name", h("input", { value: b.title || "", placeholder: KIND_NAMES[b.kind] || b.kind, onchange: e => upd("title", e.target.value) })));
+      if (b.kind === "text") panel.append(h("label", { class: "chk" }, h("input", { type: "checkbox", checked: b.show_title !== false, onchange: e => upd("show_title", e.target.checked) }), " Show the name as a heading in the block"));
+      if (b.kind === "text" || b.kind === "title") {
+        panel.append(lbl("Text", h("textarea", { rows: 8, onchange: e => upd("text", e.target.value) }, b.text || "")),
+          h("div", { class: "row2" }, lbl("Font size (pt)", numEl(b.font_size || 12, v => upd("font_size", v))), h("label", { class: "chk" }, h("input", { type: "checkbox", checked: !!b.bold, onchange: e => upd("bold", e.target.checked) }), " Bold")),
+          h("label", { class: "chk" }, h("input", { type: "checkbox", checked: !!b.shrink, onchange: e => upd("shrink", e.target.checked) }), " Shrink text to fit the block"));
+        const pg2 = app.p.page, [W2, H2] = paperSize(pg2), mg = pg2.margins_mm;
+        const L = layoutText(b, app.p, b.w * (W2 - mg.left - mg.right), b.h * (H2 - mg.top - mg.bottom));
+        panel.append(h("p", { class: L.hidden ? "msg err" : "hint" }, L.hidden
+          ? `${L.hidden} line${L.hidden > 1 ? "s don't" : " doesn't"} fit. Make the block taller, the text smaller, or tick Shrink text to fit.`
+          : b.shrink && L.shrunkPt < (b.font_size || 12) ? `Text shrunk to ${L.shrunkPt} pt to fit.` : "Text wraps to the block width. Start a new line with Enter."));
+      }
       if (b.kind === "legend") panel.append(lbl("Text size", numEl(b.font_size || 11, v => upd("font_size", v))));
       if (b.kind === "image") panel.append(lbl("Image (logo, key plan…)", h("input", { type: "file", accept: "image/png,image/jpeg,image/gif,image/webp,image/svg+xml",
         onchange: async e => { try { const im = await readImage(e.target.files[0]); upd("data", im.data); } catch (err) { app.toast(err.message); } } })));

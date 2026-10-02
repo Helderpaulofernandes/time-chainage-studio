@@ -10,16 +10,29 @@ const app = {
   commit() { this.pushUndo(JSON.stringify(this.p)); },
   pushUndo(s) { this.undoS.push(s); if (this.undoS.length > 80) this.undoS.shift(); this.redoS = []; },
   changed(rerender = true) { this.saveState = "Unsaved changes"; status(); save(); if (rerender) render(); },
-  open(p) { this.p = p; this.sel = null; this.undoS = []; this.redoS = []; try { localStorage.setItem("tcs-last", p.id); } catch (e) { /* storage blocked */ } this.saveState = "Saved"; render(); },
-  load(p) { this.commit(); this.p = p; this.sel = null; render(); },
+  open(p) { this.p = p; this.rev = p.rev || 0; this.stale = false; this.sel = null; this.undoS = []; this.redoS = []; try { localStorage.setItem("tcs-last", p.id); } catch (e) { /* storage blocked */ } this.saveState = "Saved"; render(); },
+  load(p) { this.commit(); this.p = p; this.rev = p.rev || 0; this.sel = null; render(); },
+  rev: 0, stale: false, // server revision of the copy this window last read or saved; undo never changes it
   toast,
 };
 window.tcs = app; // handy for debugging from the console
 
 const save = debounce(async () => {
-  if (!app.p) return;
-  try { app.saveState = "Saving…"; status(); const s = await api.save(app.p); app.saveState = "Saved " + new Date().toLocaleTimeString().slice(0, 5); status(); if (s.id !== app.p.id) app.p.id = s.id; }
-  catch (e) { app.saveState = "Not saved: " + e.message; status(); }
+  if (!app.p || app.stale) return;
+  try {
+    app.saveState = "Saving…"; status();
+    app.p.rev = app.rev;
+    const s = await api.save(app.p);
+    app.rev = app.p.rev = s.rev;
+    app.saveState = "Saved " + new Date().toLocaleTimeString().slice(0, 5); status();
+  } catch (e) {
+    if (e.status === 409) {
+      app.stale = true;
+      app.saveState = "Not saved: changed in another window. Reload the page (F5).";
+      toast("This project was changed in another window, so this window's changes were not saved. Reload the page (F5) to get the latest version.");
+    } else app.saveState = "Not saved: " + e.message;
+    status();
+  }
 }, 700);
 
 function undo() { if (!app.undoS.length) return; app.redoS.push(JSON.stringify(app.p)); app.p = JSON.parse(app.undoS.pop()); validSel(); app.changed(); toast("Undone"); }

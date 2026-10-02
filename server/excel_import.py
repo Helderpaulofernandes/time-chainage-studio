@@ -269,7 +269,9 @@ def import_workbook(data: bytes, discipline: str = "rail") -> dict:
         for v in (min(min(a["ch0_m"], a["ch1_m"]) for a in acts), max(max(a["ch0_m"], a["ch1_m"]) for a in acts)):
             p["locations"].append({"id": new_id("l_"), "name": "Limit", "ch_m": v, "to_m": None, "type": "limit", "row": None, "label": True,
                                    "grid": True, "notes": "From the activity extents"})
-    p["page"]["blocks"][-1]["text"] = "\n".join(f"{k_}: {v_}" for k_, v_ in (datasets[0].get("notes") or [])[:6]) or "Notes"
+    notes_block = p["page"]["blocks"][-1]
+    if datasets[0].get("notes"):
+        notes_block.update(title="Assumptions", shrink=True, text="\n".join(f"{k_}: {v_}" for k_, v_ in datasets[0]["notes"]))
     return p
 
 

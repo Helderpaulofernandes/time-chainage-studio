@@ -56,6 +56,7 @@ def load(pid: str) -> dict:
 
 def save(p: dict) -> dict:
     p = normalise(p)
+    p["rev"] = int(p.get("rev") or 0) + 1  # every save gets a new revision; see main.put_project
     f = _path(p["id"])
     # write then replace, so a crash never leaves half a project on disk
     fd, tmp = tempfile.mkstemp(dir=PROJECTS, suffix=".tmp")

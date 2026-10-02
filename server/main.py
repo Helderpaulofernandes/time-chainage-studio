@@ -21,6 +21,15 @@ app = FastAPI(title="Time-Chainage Studio", version="0.1.0",
 WEB = pathlib.Path(__file__).resolve().parent.parent / "web"
 
 
+@app.middleware("http")
+async def no_stale_front_end(request, call_next):
+    """Make browsers re-check the page and scripts on every load, so an update is never mixed with cached old code."""
+    resp = await call_next(request)
+    if not request.url.path.startswith("/api/"):
+        resp.headers["Cache-Control"] = "no-cache"
+    return resp
+
+
 def _slug(s: str) -> str:
     return re.sub(r"[^A-Za-z0-9]+", "_", s).strip("_")[:60] or "project"
 
@@ -66,6 +75,13 @@ def get_project(pid: str):
 def put_project(pid: str, body: dict = Body(...)):
     if body.get("id") != pid:
         raise HTTPException(400, "The project id in the body does not match the URL.")
+    # refuse a save based on an older revision, so two windows (or two people) never silently overwrite each other
+    try:
+        current = store.load(pid)
+    except KeyError:
+        current = None
+    if current is not None and int(body.get("rev") or 0) != int(current.get("rev") or 0):
+        raise HTTPException(409, "This project was changed in another window since you opened it. Reload the page to see the latest version.")
     return store.save(body)
 
 

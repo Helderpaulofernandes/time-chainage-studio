@@ -143,7 +143,8 @@ def default_page() -> dict:
             {"id": "titleblock", "kind": "titleblock", "x": 0.72, "y": 0, "w": 0.28, "h": 0.07, "border": True},
             {"id": "chart", "kind": "chart", "x": 0, "y": 0.08, "w": 0.82, "h": 0.92, "border": True},
             {"id": "legend", "kind": "legend", "x": 0.83, "y": 0.08, "w": 0.17, "h": 0.6, "border": True},
-            {"id": "notes", "kind": "text", "x": 0.83, "y": 0.69, "w": 0.17, "h": 0.31, "text": "Notes", "font_size": 9, "border": True},
+            {"id": "notes", "kind": "text", "title": "Notes", "show_title": True, "shrink": True, "x": 0.83, "y": 0.69, "w": 0.17, "h": 0.31,
+             "text": "", "font_size": 9, "border": True},
         ],
     }
 

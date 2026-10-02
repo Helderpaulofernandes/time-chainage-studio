@@ -9,7 +9,7 @@ async function req(method, url, body, isForm) {
   if (!r.ok) {
     let msg = `${r.status} ${r.statusText}`;
     try { const j = await r.json(); msg = j.detail ? (typeof j.detail === "string" ? j.detail : JSON.stringify(j.detail)) : msg; } catch (e) { /* not JSON */ }
-    throw new Error(msg);
+    const err = new Error(msg); err.status = r.status; throw err;
   }
   const ct = r.headers.get("content-type") || "";
   return ct.includes("application/json") ? r.json() : r.blob();
