@@ -383,9 +383,39 @@ function styleProps(box, s) {
     h("div", { class: "btns" }, h("button", { type: "button", class: "danger", onclick: delSel }, "Delete style")));
 }
 
-function listTable(box, head, rows, onClick) {
-  box.append(h("div", { class: "list" }, h("table", { class: "grid-tbl" }, h("thead", {}, h("tr", {}, head.map(x => h("th", {}, x)))),
-    h("tbody", {}, rows.map(r => h("tr", { class: r.on ? "on" : "", onclick: () => onClick(r) }, r.cells.map((c, i) => h("td", { class: r.num?.includes(i) ? "n" : "" }, c))))))));
+// Lists can delete: pass the kind ("act" | "loc" | "mk") to get a tick box and a × on each row, plus "Delete selected".
+const picks = { act: new Set(), loc: new Set(), mk: new Set() };
+const KEY = { act: "activities", loc: "locations", mk: "time_markers" };
+function deleteItems(kind, ids) {
+  const set = new Set(ids); if (!set.size) return;
+  app.commit();
+  app.p[KEY[kind]] = app.p[KEY[kind]].filter(x => !set.has(x.id));
+  if (app.sel?.kind === kind && set.has(app.sel.id)) app.sel = null;
+  ids.forEach(i => picks[kind].delete(i));
+  app.changed(); toast(`Deleted ${set.size} ${set.size === 1 ? "item" : "items"}. Undo (Ctrl+Z) brings ${set.size === 1 ? "it" : "them"} back.`);
+}
+function listTable(box, head, rows, onClick, kind) {
+  if (!kind) {
+    box.append(h("div", { class: "list" }, h("table", { class: "grid-tbl" }, h("thead", {}, h("tr", {}, head.map(x => h("th", {}, x)))),
+      h("tbody", {}, rows.map(r => h("tr", { class: r.on ? "on" : "", onclick: () => onClick(r) }, r.cells.map((c, i) => h("td", { class: r.num?.includes(i) ? "n" : "" }, c))))))));
+    return;
+  }
+  const pk = picks[kind], shown = rows.map(r => r.id);
+  [...pk].forEach(i => { if (!app.p[KEY[kind]].some(x => x.id === i)) pk.delete(i); });
+  const nSel = shown.filter(i => pk.has(i)).length;
+  const all = h("input", { type: "checkbox", "aria-label": "Select all rows shown", checked: nSel > 0 && nSel === shown.length,
+    onclick: e => { e.stopPropagation(); shown.forEach(i => (e.target.checked ? pk.add(i) : pk.delete(i))); panel(); } });
+  if (nSel > 0 && nSel < shown.length) all.indeterminate = true;
+  box.append(h("div", { class: "btns listbar" },
+    h("span", { class: "hint" }, nSel ? `${nSel} selected` : `${rows.length} shown`),
+    h("button", { type: "button", class: "danger small", disabled: !nSel, onclick: () => deleteItems(kind, shown.filter(i => pk.has(i))) }, `Delete selected${nSel ? ` (${nSel})` : ""}`),
+    nSel ? h("button", { type: "button", class: "small", onclick: () => { shown.forEach(i => pk.delete(i)); panel(); } }, "Clear selection") : null));
+  box.append(h("div", { class: "list" }, h("table", { class: "grid-tbl" },
+    h("thead", {}, h("tr", {}, h("th", {}, all), head.map(x => h("th", {}, x)), h("th", {}))),
+    h("tbody", {}, rows.map(r => h("tr", { class: (r.on ? "on " : "") + (pk.has(r.id) ? "picked" : ""), onclick: () => onClick(r) },
+      h("td", {}, h("input", { type: "checkbox", "aria-label": "Select row", checked: pk.has(r.id), onclick: e => { e.stopPropagation(); e.target.checked ? pk.add(r.id) : pk.delete(r.id); panel(); } })),
+      r.cells.map((c, i) => h("td", { class: r.num?.includes(i) ? "n" : "" }, c)),
+      h("td", {}, h("button", { type: "button", class: "rowdel", title: "Delete", "aria-label": "Delete this row", onclick: e => { e.stopPropagation(); deleteItems(kind, [r.id]); } }, "×"))))))));
 }
 function actsPanel(box) {
   const p = app.p, q = h("input", { placeholder: "Filter by ID, name or style", value: actsPanel.q || "", oninput: e => { actsPanel.q = e.target.value; panel(); setTimeout(() => { const i = $("#panel-body input"); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }); } });
@@ -395,7 +425,7 @@ function actsPanel(box) {
   const sm = styleMap(p);
   listTable(box, ["", "ID", "Activity", "Start", "Finish", "Days"], rows.map(a => ({ id: a.id, on: app.sel?.id === a.id, num: [3, 4, 5],
     cells: [h("i", { class: "sw", style: `background:${sm[a.style]?.colour || "#999"}` }), a.code, a.name, niceDate(tms(a.start)), niceFinish(tms(a.finish)), ((tms(a.finish) - tms(a.start)) / DAY).toFixed(0)] })),
-    r => { select("act", r.id); scrollToAct(r.id); });
+    r => { select("act", r.id); scrollToAct(r.id); }, "act");
 }
 function scrollToAct(id) { const a = app.p.activities.find(x => x.id === id); if (!a || !G) return; const box = $("#chart-scroll"); box.scrollTop = Math.max(0, Math.min(G.Y(tms(a.start)), G.Y(tms(a.finish))) - box.clientHeight / 3); }
 function stylesPanel(box) {
@@ -408,8 +438,15 @@ function stylesPanel(box) {
 function locsPanel(box) {
   const p = app.p;
   box.append(h("div", { class: "btns" }, h("button", { type: "button", onclick: insertLoc }, "Add location"), h("button", { type: "button", onclick: () => D.projectSetup(app, "edit") }, "Edit sections")));
-  listTable(box, ["Chainage", "Name", "Type"], p.locations.slice().sort((a, b) => a.ch_m - b.ch_m).map(l => ({ id: l.id, on: app.sel?.id === l.id, num: [0],
-    cells: [chFmt(p, l.ch_m), l.name, (p.location_types.find(t => t.id === l.type) || {}).name || l.type] })), r => select("loc", r.id));
+  // filter by type and text, so a whole type (e.g. all occupation crossings) can be selected and deleted at once
+  const usedTypes = [...new Set(p.locations.map(l => l.type))];
+  box.append(h("div", { class: "btns" },
+    S([["", "All types"], ...usedTypes.map(t => [t, (p.location_types.find(x => x.id === t) || {}).name || t])], locsPanel.type || "", v => { locsPanel.type = v; panel(); }),
+    h("input", { placeholder: "Filter by name", value: locsPanel.q || "", oninput: e => { locsPanel.q = e.target.value; panel(); setTimeout(() => { const i = $("#loc-q"); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }); }, id: "loc-q" })));
+  const lq = (locsPanel.q || "").toLowerCase();
+  const locs = p.locations.filter(l => (!locsPanel.type || l.type === locsPanel.type) && (!lq || (l.name || "").toLowerCase().includes(lq))).sort((a, b) => a.ch_m - b.ch_m);
+  listTable(box, ["Chainage", "Name", "Type"], locs.map(l => ({ id: l.id, on: app.sel?.id === l.id, num: [0],
+    cells: [chFmt(p, l.ch_m), l.name, (p.location_types.find(t => t.id === l.type) || {}).name || l.type] })), r => select("loc", r.id), "loc");
   box.append(h("h3", {}, "Location types"), h("p", { class: "hint" }, "Symbol, colour and default row for each type of location marker."));
   p.location_types.forEach(t => box.append(h("div", { class: "typerow" },
     I(t.name, edit(t, "name")), S(["circle", "tick", "box", "trapezoid", "diamond", "bar", "triangle", "band"].map(x => [x, x]), t.symbol, edit(t, "symbol")),
@@ -422,7 +459,7 @@ function mksPanel(box) {
   const p = app.p;
   box.append(h("div", { class: "btns" }, h("button", { type: "button", onclick: insertMk }, "Add time marker")));
   listTable(box, ["Start", "Marker", "Kind"], p.time_markers.slice().sort((a, b) => a.start.localeCompare(b.start)).map(m => ({ id: m.id, on: app.sel?.id === m.id, num: [0],
-    cells: [niceDate(tms(m.start)), m.label, m.kind] })), r => select("mk", r.id));
+    cells: [niceDate(tms(m.start)), m.label, m.kind] })), r => select("mk", r.id), "mk");
 }
 function dsPanel(box) {
   const p = app.p;

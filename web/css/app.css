@@ -89,6 +89,13 @@ h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; margin-t
 .grid-tbl tbody tr { cursor: pointer; } .grid-tbl tbody tr:hover { background: var(--faint); } .grid-tbl tbody tr.on { background: color-mix(in srgb, var(--sel) 22%, transparent); }
 .grid-tbl td input { padding: 2px 4px; }
 .sw { display: inline-block; width: 14px; height: 10px; }
+.grid-tbl tbody tr.picked { background: color-mix(in srgb, var(--warn) 10%, transparent); }
+.grid-tbl td:first-child input[type=checkbox], .grid-tbl th:first-child input[type=checkbox] { margin: 0; }
+.rowdel { border: none; background: none; color: var(--muted); font-size: 16px; line-height: 1; padding: 0 4px; }
+.rowdel:hover:not(:disabled) { color: var(--warn); }
+.listbar { justify-content: space-between; }
+.btns select { width: auto; }
+.btns input:not([type=checkbox]) { flex: 1 1 140px; width: auto; }
 .typerow { display: grid; grid-template-columns: 1.4fr 1fr 40px 74px auto; gap: 4px; align-items: center; }
 .dscard { border: 1px solid var(--rule); padding: 8px; display: grid; gap: 6px; }
 .dscard.on { border-color: var(--ink); box-shadow: inset 3px 0 0 var(--ink); }
