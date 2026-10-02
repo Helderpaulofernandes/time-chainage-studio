@@ -130,6 +130,8 @@ def new_project(name: str = "Untitled", discipline: str = "rail", ch_start_m: fl
         "productivities": [],
         "page": default_page(),
         "p6": None,  # {"mapping": {...}, "last_sync": "...", "source_file": "..."}
+        # {"data": data-URL, "nat_w", "nat_h", "fit": "chainage"|"full", "ch_start_m", "ch_end_m", "height_px", "opacity", "keep_ratio", "show"}
+        "header_image": None,
     }
 
 

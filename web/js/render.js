@@ -31,7 +31,17 @@ export function geometry(p, { width = 1200, ppd = null, height = null, compact =
   }
   const SH = p.sections.length ? 30 : 0;
   const AX = 24;
-  const headTop = 6;
+  // header image: stretched between two chainages (or the full chart width), above the section bands
+  const L0 = Math.min(X(c.start_m), X(c.end_m)), R0 = Math.max(X(c.start_m), X(c.end_m));
+  const hi = p.header_image && p.header_image.data && p.header_image.show !== false ? p.header_image : null;
+  let img = null;
+  if (hi) {
+    const a = hi.fit === "full" ? L0 : X(hi.ch_start_m ?? c.start_m), b = hi.fit === "full" ? R0 : X(hi.ch_end_m ?? c.end_m);
+    const w = Math.abs(b - a);
+    const ih = hi.height_px > 0 ? hi.height_px * (compact ? 0.7 : 1) : w * ((hi.nat_h || 1) / (hi.nat_w || 1));
+    img = { x: Math.min(a, b), y: 6, w, h: Math.min(ih, compact ? 420 : 900) };
+  }
+  const headTop = 6 + (img ? img.h + 6 : 0);
   const rowsTop = headTop + SH + 4;
   const top = rowsTop + rowH.reduce((a, b) => a + b, 0) + AX;
   const t0 = tms(T.start), t1 = tms(T.finish) + DAY;
@@ -43,8 +53,7 @@ export function geometry(p, { width = 1200, ppd = null, height = null, compact =
   const up = T.orientation === "up";
   const Y = ms => (up ? top + GH - ((ms - t0) / DAY) * px : top + ((ms - t0) / DAY) * px);
   const Yi = y => (up ? t0 + ((top + GH - y) / px) * DAY : t0 + ((y - top) / px) * DAY);
-  return { W, H: top + GH + bottomPad, ML, MR, PW, X, Xi, Y, Yi, top, GH, t0, t1, ppd: px, nd, SH, rowsTop, rowH, rowOf, headTop, AX, compact,
-    L: Math.min(X(c.start_m), X(c.end_m)), R: Math.max(X(c.start_m), X(c.end_m)) };
+  return { W, H: top + GH + bottomPad, ML, MR, PW, X, Xi, Y, Yi, top, GH, t0, t1, ppd: px, nd, SH, rowsTop, rowH, rowOf, headTop, AX, compact, img, L: L0, R: R0 };
 }
 
 const T = (x, y, s, attrs = "", style = "") => `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" ${attrs} style="${style}">${esc(s)}</text>`;
@@ -62,6 +71,12 @@ export function renderChart(p, opts = {}) {
     <pattern id="hatchA" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" stroke="${PAPER.hatch}" stroke-width="1.3"/></pattern>
   </defs>`;
   o += `<rect width="${W}" height="${H}" fill="${PAPER.sheet}"/>`;
+
+  // ---- header image
+  if (G.img) {
+    const hi = p.header_image;
+    o += `<image href="${hi.data}" x="${G.img.x.toFixed(1)}" y="${G.img.y}" width="${G.img.w.toFixed(1)}" height="${G.img.h.toFixed(1)}" preserveAspectRatio="${hi.keep_ratio ? "xMidYMid meet" : "none"}" opacity="${hi.opacity ?? 1}" data-hdr="1"/>`;
+  }
 
   // ---- header: sections
   p.sections.forEach((s, i) => {

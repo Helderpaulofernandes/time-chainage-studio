@@ -344,3 +344,56 @@ export function productivities(app) {
       h("p", { class: "hint" }, "An activity's own quantity and rate (in its properties) set its duration when it is not driven by P6.")),
     buttons: [{ label: "Close" }] });
 }
+
+// ------------------------------------------------------------------ images
+export function readImage(file) {
+  return new Promise((res, rej) => {
+    if (!file) return rej(new Error("Choose an image file first."));
+    if (!/^image\/(png|jpeg|gif|webp|svg\+xml)$/.test(file.type)) return rej(new Error("Choose a PNG, JPG, GIF, WebP or SVG image."));
+    const fr = new FileReader();
+    fr.onerror = () => rej(new Error("Could not read that file."));
+    fr.onload = () => { const img = new Image(); img.onload = () => res({ data: fr.result, nat_w: img.naturalWidth || 1000, nat_h: img.naturalHeight || 200, name: file.name });
+      img.onerror = () => rej(new Error("That file is not an image this browser can show.")); img.src = fr.result; };
+    fr.readAsDataURL(file);
+  });
+}
+
+export function headerImage(app) {
+  const p = app.p, c = p.chainage, cur = p.header_image || {};
+  let picked = cur.data ? { data: cur.data, nat_w: cur.nat_w, nat_h: cur.nat_h, name: cur.name } : null;
+  modal({
+    title: "Header image", wide: true,
+    body: el => {
+      const prev = h("div", { class: "img-prev" }, picked ? h("img", { src: picked.data, alt: "Current header image" }) : h("p", { class: "hint" }, "No image yet."));
+      el.append(
+        h("p", { class: "hint" }, "The image sits above the section bands and is stretched between the two chainages you give, so a straight-line or network diagram lines up with the chart. It prints, and goes into TurboChart exports as the top image."),
+        field("Image file", h("input", { type: "file", id: "hi-file", accept: "image/png,image/jpeg,image/gif,image/webp,image/svg+xml",
+          onchange: async e => { try { picked = await readImage(e.target.files[0]); prev.innerHTML = ""; prev.append(h("img", { src: picked.data, alt: "Chosen header image" }), h("p", { class: "hint" }, `${picked.nat_w} × ${picked.nat_h} px`)); } catch (err) { prev.innerHTML = ""; prev.append(h("p", { class: "msg err" }, err.message)); } } })),
+        prev,
+        h("div", { class: "cols" },
+          h("fieldset", {}, h("legend", {}, "Placement"),
+            field("Stretch across", sel("hi-fit", [["chainage", "Between these chainages"], ["full", "The full chart width"]], cur.fit || "chainage")),
+            h("div", { class: "row2" },
+              field(`Left edge chainage (${c.unit})`, inp("hi-c0", mToCh(p, cur.ch_start_m ?? c.start_m), { type: "number", step: "any" })),
+              field(`Right edge chainage (${c.unit})`, inp("hi-c1", mToCh(p, cur.ch_end_m ?? c.end_m), { type: "number", step: "any" }))),
+            h("small", { class: "hint" }, "Use the chainages that the image's own left and right edges represent.")),
+          h("fieldset", {}, h("legend", {}, "Size and look"),
+            field("Height (px on screen)", inp("hi-h", cur.height_px || "", { type: "number", min: 10, placeholder: "automatic, keeps proportions" })),
+            field("Opacity", inp("hi-op", cur.opacity ?? 1, { type: "number", step: "0.05", min: 0.05, max: 1 })),
+            h("label", { class: "chk" }, h("input", { type: "checkbox", id: "hi-ratio", checked: !!cur.keep_ratio }), " Never distort the image (fit inside the box)"),
+            h("label", { class: "chk" }, h("input", { type: "checkbox", id: "hi-show", checked: cur.show !== false }), " Show the image"))));
+    },
+    buttons: [
+      { label: "Remove image", danger: true, onClick: ({ close }) => { app.commit(); p.header_image = null; close(); app.changed(); } },
+      { label: "Cancel" },
+      { label: "Apply", primary: true, onClick: ({ close, setMsg, dlg }) => {
+        if (!picked) return setMsg("Choose an image file first.", "err");
+        const c0 = chToM(p, val(dlg, "hi-c0")), c1 = chToM(p, val(dlg, "hi-c1"));
+        if (val(dlg, "hi-fit") === "chainage" && (c0 == null || c1 == null || c0 === c1)) return setMsg("Give two different chainages for the image edges.", "err");
+        app.commit();
+        p.header_image = { ...picked, fit: val(dlg, "hi-fit"), ch_start_m: c0, ch_end_m: c1, height_px: parseFloat(val(dlg, "hi-h")) || null,
+          opacity: Math.min(1, Math.max(0.05, parseFloat(val(dlg, "hi-op")) || 1)), keep_ratio: chk(dlg, "hi-ratio"), show: chk(dlg, "hi-show") };
+        close(); app.changed();
+      } }],
+  });
+}

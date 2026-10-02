@@ -45,10 +45,10 @@ const MENU = {
     ["Zoom chainage in", "", () => { app.xZoom = Math.min(20, app.xZoom * 1.5); render(); }], ["Zoom chainage out", "", () => { app.xZoom = Math.max(1, app.xZoom / 1.5); render(); }], ["Fit chainage", "", () => { app.xZoom = 1; render(); }], "-",
     ["Labels", "", () => toggle("show_labels"), () => app.p?.view.show_labels !== false], ["Footprints", "", () => toggle("show_footprints"), () => app.p?.view.show_footprints !== false],
     ["Time markers", "", () => toggle("show_time_markers"), () => app.p?.view.show_time_markers !== false], ["Location grid", "", () => toggle("show_location_grid"), () => app.p?.view.show_location_grid !== false]],
-  Insert: [["Activity", "", () => need() && insertAct()], ["Location marker", "", () => need() && insertLoc()], ["Time marker", "", () => need() && insertMk()], ["Section…", "", () => need() && D.projectSetup(app, "edit")], ["Activity style", "", () => need() && insertStyle()]],
+  Insert: [["Activity", "", () => need() && insertAct()], ["Location marker", "", () => need() && insertLoc()], ["Time marker", "", () => need() && insertMk()], ["Section…", "", () => need() && D.projectSetup(app, "edit")], ["Activity style", "", () => need() && insertStyle()], ["Header image…", "", () => need() && D.headerImage(app)]],
   Data: [["Import from P6 (XER) with mapping…", "", () => D.p6Dialog(app, "import")], ["Sync from P6 (XER)…", "", () => need() && D.p6Dialog(app, "sync")], "-",
     ["Data sets (options)", "", () => need() && tab("ds")], ["Productivity library", "", () => need() && D.productivities(app)]],
-  Project: [["Project setup…", "", () => need() && D.projectSetup(app, "edit")], ["Activity styles", "", () => need() && tab("styles")], ["Locations and types", "", () => need() && tab("locs")]],
+  Project: [["Project setup…", "", () => need() && D.projectSetup(app, "edit")], ["Header image…", "", () => need() && D.headerImage(app)], ["Activity styles", "", () => need() && tab("styles")], ["Locations and types", "", () => need() && tab("locs")]],
   Help: [["Keyboard shortcuts", "", () => shortcuts()], ["API documentation", "", () => window.open("/docs", "_blank")]],
 };
 function need() { if (!app.p) { toast("Open or create a project first."); return false; } return true; }
@@ -147,6 +147,7 @@ svgEl.addEventListener("pointerdown", e => {
   if (ac) { select("act", ac.dataset.act); return startDrag(e, "move", ac.dataset.act, q); }
   if (mk) return select("mk", mk.dataset.mk);
   if (lc) return select("loc", lc.dataset.loc);
+  if (e.target.closest("[data-hdr]")) return D.headerImage(app);
   if (app.sel) { app.sel = null; render(); }
 });
 function startDrag(e, type, id, q, end) {

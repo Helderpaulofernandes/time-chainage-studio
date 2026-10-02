@@ -154,7 +154,20 @@ def export(p: dict) -> bytes:
     t1 = p["time"]["finish"] + "T00:00"
     c_lo, c_hi = pos(p["chainage"]["start_m"]), pos(p["chainage"]["end_m"])
 
+    # header image -> TurboChart top image (it takes a raw base64 PNG or JPEG; SVG has no equivalent)
+    hi = p.get("header_image") or {}
+    m = re.match(r"data:image/(png|jpeg);base64,(.+)", hi.get("data") or "", re.S)
+    top = {"FitTopImage": False, "ImageBase64": None, "ShowTopImage": False, "TopImageStartPosition": 0, "TopImageEndPosition": 0, "MaxImagePercentage": 20}
+    if m:
+        full = hi.get("fit") == "full"
+        top = {"FitTopImage": full, "ImageBase64": m.group(2), "ShowTopImage": hi.get("show", True) is not False,
+               "TopImageStartPosition": 0 if full else pos(hi.get("ch_start_m", p["chainage"]["start_m"])),
+               "TopImageEndPosition": 0 if full else pos(hi.get("ch_end_m", p["chainage"]["end_m"])), "MaxImagePercentage": 30}
+
     def chart(name, ds1, ds2=None):
+        return {**_chart_base(name, ds1, ds2), **top}
+
+    def _chart_base(name, ds1, ds2=None):
         return {"AllowDragging": False, "AllowTaskCreation": False, "Annotations": [], "ChartName": name, "ChartSpecificShapeValues": chart_vals,
                 "CriticalityColour": _col("#FF0000"), "CriticalityOpacity": 0.9, "CriticalityThickness": 4, "CustomPageHeight": 0, "CustomPageWidth": 0,
                 "DataSet1Id": ds1, "DataSet2Blend": 0.2 if ds2 else 0, "DataSet2Colour": grey, "DataSet2Id": ds2 or ZERO, "DataSet2Offset": 0,
@@ -280,4 +293,34 @@ def import_tchart(data: bytes, unit_hint: str = "auto", tz_name: str = "Australi
                                       "start": _from_tc(h["StartDate"], tz), "finish": _from_tc(h.get("FinishDate"), tz),
                                       "ch0_m": (h.get("StartPosition") or 0) * k if h.get("StartPosition") is not None else None,
                                       "ch1_m": h["EndPosition"] * k if h.get("EndPosition") is not None else None, "colour": _hex(h.get("FillColour"))})
+    # top image: take it from the first chart that has one
+    img_chart = next((c for c in doc.get("Charts") or [] if c.get("ImageBase64")), None)
+    if img_chart:
+        raw = img_chart["ImageBase64"]
+        kind, w, hgt = _img_info(raw)
+        full = bool(img_chart.get("FitTopImage")) or not (img_chart.get("TopImageEndPosition") or 0) > (img_chart.get("TopImageStartPosition") or 0)
+        p["header_image"] = {"data": f"data:image/{kind};base64,{raw}", "nat_w": w, "nat_h": hgt, "name": "TurboChart top image",
+                             "fit": "full" if full else "chainage",
+                             "ch_start_m": None if full else img_chart["TopImageStartPosition"] * k,
+                             "ch_end_m": None if full else img_chart["TopImageEndPosition"] * k,
+                             "height_px": None, "opacity": 1, "keep_ratio": False, "show": img_chart.get("ShowTopImage", True) is not False}
     return p
+
+
+def _img_info(b64: str) -> tuple[str, int, int]:
+    """Image type and pixel size from the first bytes of a base64 PNG or JPEG."""
+    import base64
+    head = base64.b64decode(b64[:120000] + "=" * (-len(b64[:120000]) % 4), validate=False)
+    if head[:8] == b"\x89PNG\r\n\x1a\n":
+        return "png", int.from_bytes(head[16:20], "big"), int.from_bytes(head[20:24], "big")
+    if head[:2] == b"\xff\xd8":
+        i = 2
+        while i + 9 < len(head):
+            if head[i] != 0xFF:
+                break
+            marker, seg = head[i + 1], int.from_bytes(head[i + 2:i + 4], "big")
+            if marker in (0xC0, 0xC1, 0xC2):
+                return "jpeg", int.from_bytes(head[i + 7:i + 9], "big"), int.from_bytes(head[i + 5:i + 7], "big")
+            i += 2 + seg
+        return "jpeg", 1000, 200
+    return "png", 1000, 200

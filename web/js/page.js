@@ -1,6 +1,7 @@
 // Page layout: paper, margins and placed blocks (title, title block, chart, legend, text). Used for print and export.
 import { renderChart, renderLegend, PAPER } from "./render.js";
 import { esc, h, $, $$, download, niceDate, tms, clamp, uid } from "./util.js";
+import { readImage } from "./dialogs.js";
 
 export const PAPERS = { A4: [297, 210], A3: [420, 297], A2: [594, 420], A1: [841, 594], A0: [1189, 841], Letter: [279, 216], Ledger: [432, 279], "ANSI D": [864, 559] };
 const UNITS_PER_MM = 3.5; // drawing units per millimetre inside placed blocks (sets text size on paper)
@@ -35,6 +36,9 @@ export function renderPage(p, { selected = null, forPrint = false } = {}) {
       const lg = renderLegend(p, { width: iw, size: b.font_size || 11 });
       const sc = Math.min(1, (ih - 16) / Math.max(1, lg.height));
       o += `<svg x="${x + 2}" y="${y + 2}" width="${w - 4}" height="${hh - 4}" viewBox="0 0 ${(iw - 16) / sc} ${(ih - 16) / sc}">${lg.svg}</svg>`;
+    } else if (b.kind === "image") {
+      if (b.data) o += `<image href="${b.data}" x="${x + 1}" y="${y + 1}" width="${w - 2}" height="${hh - 2}" preserveAspectRatio="xMidYMid meet"/>`;
+      else if (!forPrint) o += `<text x="${x + w / 2}" y="${y + hh / 2}" font-size="3" text-anchor="middle" fill="#9AA5A8">Choose an image in the panel</text>`;
     } else if (b.kind === "titleblock") {
       const m = p.meta, cells = [["Project", m.title || p.name], ["Client", m.client], ["Contract", m.contract], ["Option", (p.datasets.find(d => d.id === p.view.main_dataset) || {}).name],
         ["Revision", m.revision], ["Prepared by", m.author], ["Date", niceDate(Date.now())], ["Sheet", `${pg.paper} ${pg.orientation}`]];
@@ -98,10 +102,12 @@ export function pageView(app) {
       if (b.kind === "text" || b.kind === "title") panel.append(lbl("Text", h("textarea", { rows: 5, onchange: e => upd("text", e.target.value) }, b.text || "")),
         h("div", { class: "row2" }, lbl("Font size (pt)", numEl(b.font_size || 12, v => upd("font_size", v))), h("label", { class: "chk" }, h("input", { type: "checkbox", checked: !!b.bold, onchange: e => upd("bold", e.target.checked) }), " Bold")));
       if (b.kind === "legend") panel.append(lbl("Text size", numEl(b.font_size || 11, v => upd("font_size", v))));
+      if (b.kind === "image") panel.append(lbl("Image (logo, key plan…)", h("input", { type: "file", accept: "image/png,image/jpeg,image/gif,image/webp,image/svg+xml",
+        onchange: async e => { try { const im = await readImage(e.target.files[0]); upd("data", im.data); } catch (err) { app.toast(err.message); } } })));
       panel.append(h("div", { class: "btns" }, h("button", { type: "button", class: "danger", onclick: () => { app.commit(); pg.blocks = pg.blocks.filter(x => x !== b); sel = null; app.changed(false); draw(); } }, "Delete block")));
     }
     panel.append(h("div", { class: "btns" },
-      ...["text", "legend", "titleblock", "chart"].map(k => h("button", { type: "button", onclick: () => { app.commit(); const nb = { id: uid("b"), kind: k, x: .3, y: .3, w: .25, h: .15, text: k === "text" ? "Text" : "", font_size: 11, border: true }; pg.blocks.push(nb); sel = nb.id; app.changed(false); draw(); } }, `Add ${k}`))));
+      ...["text", "image", "legend", "titleblock", "chart"].map(k => h("button", { type: "button", onclick: () => { app.commit(); const nb = { id: uid("b"), kind: k, x: .3, y: .3, w: .25, h: .15, text: k === "text" ? "Text" : "", font_size: 11, border: true }; pg.blocks.push(nb); sel = nb.id; app.changed(false); draw(); } }, `Add ${k}`))));
     panel.append(h("h3", {}, "Output"), h("div", { class: "btns" },
       h("button", { type: "button", class: "primary", onclick: () => printPage(app.p) }, "Print…"),
       h("button", { type: "button", onclick: () => download(`${slug(app.p.name)}.svg`, renderPage(app.p, { forPrint: true }), "image/svg+xml") }, "Export SVG"),
