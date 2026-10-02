@@ -1,0 +1,6 @@
+# project data and uploaded files stay local
+data/
+__pycache__/
+*.pyc
+.venv/
+.claude/settings.local.json

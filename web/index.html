@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Time-Chainage Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div id="app">
+  <header class="appbar">
+    <div class="brand"><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><rect x="1" y="1" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M3 4 L19 18" stroke="#C26A12" stroke-width="2.4"/><path d="M3 12 L12 19" stroke="#1F6E8C" stroke-width="2.4"/></svg>
+      <b>Time-Chainage Studio</b><span id="proj-name"></span></div>
+    <nav id="menubar" aria-label="Main menu"></nav>
+  </header>
+
+  <div id="empty" class="empty">
+    <div>
+      <h1>Time–chainage display for P6</h1>
+      <p>Show a P6 programme against chainage for rail, road or tunnel work. Dates stay in P6. You map the fields once, then sync when P6 changes. Activities can show productivity rates, labels that follow their slope, and the footprint of the work as it moves.</p>
+      <div class="btns">
+        <button type="button" class="primary" id="e-new">New project…</button>
+        <button type="button" id="e-open">Open project…</button>
+      </div>
+      <div class="btns">
+        <button type="button" id="e-p6">Import from P6 (XER)…</button>
+        <button type="button" id="e-excel">Import Excel workbook…</button>
+        <button type="button" id="e-tc">Import TurboChart…</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="workspace" hidden>
+    <div class="toolbar" id="tools">
+      <div class="seg" role="group" aria-label="Chart tool">
+        <button type="button" data-mode="select" aria-pressed="true" title="Select and drag (V)">Select</button>
+        <button type="button" data-mode="draw" aria-pressed="false" title="Draw an activity (D)">Draw activity</button>
+      </div>
+      <div class="seg"><button type="button" id="b-undo" title="Undo (Ctrl+Z)">Undo</button><button type="button" id="b-redo" title="Redo (Ctrl+Y)">Redo</button></div>
+      <div class="seg"><button type="button" id="b-zout" title="Zoom time out">Time −</button><button type="button" id="b-zin" title="Zoom time in">Time +</button><button type="button" id="b-fit" title="Fit the period to the window">Fit</button></div>
+      <label class="inline" for="ppd">px/day <input id="ppd" type="number" step="0.1" min="0.05"></label>
+      <label class="inline" for="ds-main">Show <select id="ds-main"></select></label>
+      <label class="inline" for="ds-cmp">Compare with <select id="ds-cmp"></select></label>
+      <div class="seg right" id="viewtabs"><button type="button" data-view="chart" aria-pressed="true">Chart</button><button type="button" data-view="page" aria-pressed="false">Page layout</button></div>
+    </div>
+
+    <div class="main">
+      <section id="chart-view">
+        <div id="chart-scroll"><svg id="chart" role="img" aria-label="Time chainage chart"></svg></div>
+      </section>
+      <section id="page-view" hidden>
+        <div id="page-canvas"></div>
+        <aside id="page-side"></aside>
+      </section>
+      <aside class="panel">
+        <div class="ptabs" id="ptabs" role="tablist">
+          <button type="button" data-tab="props" aria-selected="true">Properties</button>
+          <button type="button" data-tab="acts" aria-selected="false">Activities</button>
+          <button type="button" data-tab="styles" aria-selected="false">Styles</button>
+          <button type="button" data-tab="locs" aria-selected="false">Locations</button>
+          <button type="button" data-tab="mks" aria-selected="false">Markers</button>
+          <button type="button" data-tab="ds" aria-selected="false">Data sets</button>
+        </div>
+        <div id="panel-body"></div>
+      </aside>
+    </div>
+  </div>
+
+  <footer class="statusbar"><span id="st-cursor"></span><span id="st-count"></span><span id="st-save"></span></footer>
+</div>
+<div id="print-root"></div>
+<div id="toast" class="toast" hidden></div>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
