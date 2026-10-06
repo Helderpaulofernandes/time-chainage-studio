@@ -138,6 +138,26 @@ export async function openProject(app) {
   });
 }
 
+// ------------------------------------------------------------------ example projects
+export async function examples(app) {
+  let list = [];
+  try { list = await (await fetch("templates/index.json", { cache: "no-cache" })).json(); } catch (e) { /* offline */ }
+  modal({
+    title: "Start from an example", wide: true,
+    body: el => {
+      el.append(h("p", { class: "hint" }, "Each example loads as a new project of your own, so you can change it freely. All names and figures are made up."));
+      if (!list.length) { el.append(h("p", { class: "msg err" }, "The examples could not be loaded. Check the internet connection and try again.")); return; }
+      el.append(h("div", { class: "examples" }, list.map(x => h("div", { class: "example" }, h("h3", {}, x.name), h("p", { class: "hint" }, x.text),
+        h("button", { type: "button", class: "primary", onclick: async e => {
+          e.target.disabled = true;
+          try { const tpl = await (await fetch("templates/" + x.file, { cache: "no-cache" })).json(); const p = await api.fromTemplate(tpl);
+            $("dialog.modal")?.close(); $("dialog.modal")?.remove(); app.open(p, true); app.toast(`Loaded "${p.meta.title || p.name}".`); }
+          catch (err) { e.target.disabled = false; app.toast("Could not load that example: " + err.message); } } }, "Use this example")))));
+    },
+    buttons: [{ label: "Close" }],
+  });
+}
+
 // ------------------------------------------------------------------ simple imports
 export function importExcel(app) {
   modal({

@@ -115,6 +115,8 @@ export const api = {
   async importExcel(file, discipline) { if (typeof XLSX === "undefined") throw new Error("The Excel reader did not load. Check the internet connection and reload the page.");
     const p = await importWorkbook(await file.arrayBuffer(), discipline); p.name = file.name.replace(/\.[^.]+$/, ""); return api.put(p); },
   async importTchart(file, unit) { let p; try { p = importTchart(await file.text(), unit); } catch (e) { throw new Error("Could not read that TurboChart file: " + e.message); } p.name = file.name.replace(/\.[^.]+$/, ""); return api.put(p); },
+  // A ready-made example: always saved as a new project of your own.
+  async fromTemplate(obj) { const p = normalise(JSON.parse(JSON.stringify(obj))); p.id = newId("prj_"); p.rev = 0; return api.put(p); },
   async importJson(file) { const p = normalise(JSON.parse(await file.text())); if (!p.activities) throw new Error("That file is not a Time-Chainage Studio project."); p.id = newId("prj_"); p.rev = 0; return api.put(p); },
 
   // ---- P6

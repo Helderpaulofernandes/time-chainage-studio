@@ -1,0 +1,869 @@
+{
+ "schema": 1,
+ "id": "prj_7b2254e277",
+ "name": "Example highway upgrade",
+ "discipline": "road",
+ "rev": 0,
+ "meta": {
+  "title": "Example Highway – duplication",
+  "subtitle": "Example project · made-up data",
+  "client": "Example Roads",
+  "contract": "EX-ROAD-02",
+  "revision": "A",
+  "author": "",
+  "data_date": ""
+ },
+ "chainage": {
+  "start_m": 0,
+  "end_m": 12400,
+  "unit": "km",
+  "prefix": "CH",
+  "decimals": 3,
+  "major_m": 1000,
+  "minor_m": 250,
+  "reverse": false,
+  "snap_m": 5
+ },
+ "time": {
+  "start": "2027-03-01",
+  "finish": "2028-07-31",
+  "px_per_day": 1.4,
+  "orientation": "down",
+  "week_start": 1,
+  "week_labels": "project",
+  "shade_weekends": false,
+  "work_days_per_week": 7,
+  "tz": "Australia/Melbourne"
+ },
+ "location_types": [
+  {
+   "id": "interchange",
+   "name": "Interchange",
+   "symbol": "trapezoid",
+   "colour": "#C26A12",
+   "row": 1,
+   "grid": true
+  },
+  {
+   "id": "intersection",
+   "name": "Intersection",
+   "symbol": "circle",
+   "colour": "#1F6E8C",
+   "row": 1,
+   "grid": true
+  },
+  {
+   "id": "bridge",
+   "name": "Bridge / overpass",
+   "symbol": "box",
+   "colour": "#6A4FA3",
+   "row": 2,
+   "grid": true
+  },
+  {
+   "id": "culvert",
+   "name": "Culvert",
+   "symbol": "box",
+   "colour": "#6A4FA3",
+   "row": 3,
+   "grid": false
+  },
+  {
+   "id": "wall",
+   "name": "Retaining wall",
+   "symbol": "band",
+   "colour": "#7F6000",
+   "row": 3,
+   "grid": false
+  },
+  {
+   "id": "utility",
+   "name": "Utility crossing",
+   "symbol": "tick",
+   "colour": "#B13A3A",
+   "row": 4,
+   "grid": false
+  },
+  {
+   "id": "access",
+   "name": "Property access",
+   "symbol": "tick",
+   "colour": "#5D6B70",
+   "row": 4,
+   "grid": false
+  },
+  {
+   "id": "limit",
+   "name": "Project limit",
+   "symbol": "bar",
+   "colour": "#18262B",
+   "row": 1,
+   "grid": true
+  },
+  {
+   "id": "other",
+   "name": "Other",
+   "symbol": "diamond",
+   "colour": "#5D6B70",
+   "row": 4,
+   "grid": false
+  }
+ ],
+ "location_rows": 4,
+ "styles": [
+  {
+   "code": "CLEAR",
+   "name": "Clear & grub",
+   "kind": "line",
+   "colour": "#548235",
+   "width": 3,
+   "dash": "solid",
+   "fill_opacity": 0.2,
+   "label": {
+    "show": true,
+    "text": "{name}",
+    "follow_slope": true,
+    "position": "mid",
+    "side": "above",
+    "size": 11
+   },
+   "footprint": {
+    "enabled": false,
+    "length_m": 0,
+    "lag_days": 0,
+    "opacity": 0.18
+   },
+   "legend": true
+  },
+  {
+   "code": "EARTH",
+   "name": "Bulk earthworks",
+   "kind": "block",
+   "colour": "#C65911",
+   "width": 1.5,
+   "dash": "solid",
+   "fill_opacity": 0.3,
+   "label": {
+    "show": true,
+    "text": "{name}",
+    "follow_slope": true,
+    "position": "mid",
+    "side": "above",
+    "size": 11
+   },
+   "footprint": {
+    "enabled": false,
+    "length_m": 0,
+    "lag_days": 0,
+    "opacity": 0.18
+   },
+   "legend": true
+  },
+  {
+   "code": "DRAIN",
+   "name": "Drainage",
+   "kind": "line",
+   "colour": "#00B0F0",
+   "width": 3,
+   "dash": "solid",
+   "fill_opacity": 0.2,
+   "label": {
+    "show": true,
+    "text": "{name}",
+    "follow_slope": true,
+    "position": "mid",
+    "side": "above",
+    "size": 11
+   },
+   "footprint": {
+    "enabled": false,
+    "length_m": 0,
+    "lag_days": 0,
+    "opacity": 0.18
+   },
+   "legend": true
+  },
+  {
+   "code": "SUBBASE",
+   "name": "Subbase",
+   "kind": "line",
+   "colour": "#7F7F7F",
+   "width": 3,
+   "dash": "solid",
+   "fill_opacity": 0.2,
+   "label": {
+    "show": true,
+    "text": "{name}",
+    "follow_slope": true,
+    "position": "mid",
+    "side": "above",
+    "size": 11
+   },
+   "footprint": {
+    "enabled": true,
+    "length_m": 400,
+    "lag_days": 0,
+    "opacity": 0.16
+   },
+   "legend": true
+  },
+  {
+   "code": "BASE",
+   "name": "Basecourse",
+   "kind": "line",
+   "colour": "#404040",
+   "width": 3,
+   "dash": "solid",
+   "fill_opacity": 0.2,
+   "label": {
+    "show": true,
+    "text": "{name}",
+    "follow_slope": true,
+    "position": "mid",
+    "side": "above",
+    "size": 11
+   },
+   "footprint": {
+    "enabled": false,
+    "length_m": 0,
+    "lag_days": 0,
+    "opacity": 0.18
+   },
+   "legend": true
+  },
+  {
+   "code": "ASPHALT",
+   "name": "Asphalt wearing course",
+   "kind": "line",
+   "colour": "#18262B",
+   "width": 4,
+   "dash": "solid",
+   "fill_opacity": 0.2,
+   "label": {
+    "show": true,
+    "text": "{name}",
+    "follow_slope": true,
+    "position": "mid",
+    "side": "above",
+    "size": 11
+   },
+   "footprint": {
+    "enabled": false,
+    "length_m": 0,
+    "lag_days": 0,
+    "opacity": 0.18
+   },
+   "legend": true
+  },
+  {
+   "code": "BRIDGE",
+   "name": "Bridge works",
+   "kind": "block",
+   "colour": "#6A4FA3",
+   "width": 1.5,
+   "dash": "solid",
+   "fill_opacity": 0.35,
+   "label": {
+    "show": true,
+    "text": "{name}",
+    "follow_slope": true,
+    "position": "mid",
+    "side": "above",
+    "size": 11
+   },
+   "footprint": {
+    "enabled": false,
+    "length_m": 0,
+    "lag_days": 0,
+    "opacity": 0.18
+   },
+   "legend": true
+  },
+  {
+   "code": "TRAFFIC",
+   "name": "Traffic switch",
+   "kind": "milestone",
+   "colour": "#C00000",
+   "width": 1.5,
+   "dash": "solid",
+   "fill_opacity": 0.2,
+   "label": {
+    "show": true,
+    "text": "{name}",
+    "follow_slope": true,
+    "position": "mid",
+    "side": "above",
+    "size": 11
+   },
+   "footprint": {
+    "enabled": false,
+    "length_m": 0,
+    "lag_days": 0,
+    "opacity": 0.18
+   },
+   "legend": true
+  }
+ ],
+ "datasets": [
+  {
+   "id": "ds_f440f9fd0a",
+   "name": "Baseline",
+   "source": "manual"
+  }
+ ],
+ "view": {
+  "main_dataset": "ds_f440f9fd0a",
+  "compare_dataset": null,
+  "show_footprints": true,
+  "show_labels": true,
+  "show_time_markers": true,
+  "show_location_grid": true
+ },
+ "sections": [
+  {
+   "id": "s_1daf8f259a",
+   "name": "Stage 1 – north",
+   "from_m": 0,
+   "to_m": 5200
+  },
+  {
+   "id": "s_55dfd866a4",
+   "name": "Stage 2 – interchange",
+   "from_m": 5200,
+   "to_m": 7600
+  },
+  {
+   "id": "s_0df9468b12",
+   "name": "Stage 3 – south",
+   "from_m": 7600,
+   "to_m": 12200
+  }
+ ],
+ "locations": [
+  {
+   "id": "l_7ea1e04d0e",
+   "name": "Project start",
+   "ch_m": 0,
+   "to_m": null,
+   "type": "limit",
+   "row": null,
+   "label": true,
+   "notes": ""
+  },
+  {
+   "id": "l_d8ead95764",
+   "name": "Northern intersection",
+   "ch_m": 850,
+   "to_m": null,
+   "type": "intersection",
+   "row": null,
+   "label": true,
+   "notes": ""
+  },
+  {
+   "id": "l_427ca7c86f",
+   "name": "Creek bridge",
+   "ch_m": 3400,
+   "to_m": 3560,
+   "type": "bridge",
+   "row": null,
+   "label": true,
+   "notes": ""
+  },
+  {
+   "id": "l_64675dfde2",
+   "name": "Main interchange",
+   "ch_m": 6100,
+   "to_m": 6900,
+   "type": "interchange",
+   "row": null,
+   "label": true,
+   "notes": ""
+  },
+  {
+   "id": "l_b907693e39",
+   "name": "Rail overpass",
+   "ch_m": 9150,
+   "to_m": 9240,
+   "type": "bridge",
+   "row": null,
+   "label": true,
+   "notes": ""
+  },
+  {
+   "id": "l_c5a64e318c",
+   "name": "Southern intersection",
+   "ch_m": 11600,
+   "to_m": null,
+   "type": "intersection",
+   "row": null,
+   "label": true,
+   "notes": ""
+  },
+  {
+   "id": "l_db215f4f00",
+   "name": "Project end",
+   "ch_m": 12200,
+   "to_m": null,
+   "type": "limit",
+   "row": null,
+   "label": true,
+   "notes": ""
+  },
+  {
+   "id": "l_b059e55dbd",
+   "name": "Retaining wall RW1",
+   "ch_m": 7800,
+   "to_m": 8300,
+   "type": "wall",
+   "row": null,
+   "label": false,
+   "notes": ""
+  },
+  {
+   "id": "l_19de2ee54d",
+   "name": "Gas main",
+   "ch_m": 1900,
+   "to_m": null,
+   "type": "utility",
+   "row": null,
+   "label": false,
+   "notes": ""
+  },
+  {
+   "id": "l_488cdfc216",
+   "name": "Water main",
+   "ch_m": 4750,
+   "to_m": null,
+   "type": "utility",
+   "row": null,
+   "label": false,
+   "notes": ""
+  },
+  {
+   "id": "l_0d8104b9a7",
+   "name": "Fibre",
+   "ch_m": 10400,
+   "to_m": null,
+   "type": "utility",
+   "row": null,
+   "label": false,
+   "notes": ""
+  },
+  {
+   "id": "l_f9473b7895",
+   "name": "Culvert 1",
+   "ch_m": 2200,
+   "to_m": null,
+   "type": "culvert",
+   "row": null,
+   "label": false,
+   "notes": ""
+  },
+  {
+   "id": "l_d4cd9a4017",
+   "name": "Culvert 2",
+   "ch_m": 5400,
+   "to_m": null,
+   "type": "culvert",
+   "row": null,
+   "label": false,
+   "notes": ""
+  },
+  {
+   "id": "l_dddeebe0a8",
+   "name": "Culvert 3",
+   "ch_m": 8900,
+   "to_m": null,
+   "type": "culvert",
+   "row": null,
+   "label": false,
+   "notes": ""
+  },
+  {
+   "id": "l_0c6cec0aff",
+   "name": "Culvert 4",
+   "ch_m": 10900,
+   "to_m": null,
+   "type": "culvert",
+   "row": null,
+   "label": false,
+   "notes": ""
+  }
+ ],
+ "time_markers": [
+  {
+   "id": "t_8a317f96b0",
+   "label": "Christmas shutdown",
+   "kind": "shutdown",
+   "start": "2027-12-20T00:00",
+   "finish": "2028-01-10T00:00",
+   "ch0_m": null,
+   "ch1_m": null,
+   "colour": "#808080"
+  },
+  {
+   "id": "t_cb7c08f045",
+   "label": "Wet season – reduced earthworks",
+   "kind": "restriction",
+   "start": "2028-01-10T00:00",
+   "finish": "2028-04-01T00:00",
+   "ch0_m": null,
+   "ch1_m": null,
+   "colour": "#C26A12"
+  },
+  {
+   "id": "t_8ec5599f10",
+   "label": "Open to traffic",
+   "kind": "milestone",
+   "start": "2028-06-02T00:00",
+   "finish": null,
+   "ch0_m": null,
+   "ch1_m": null,
+   "colour": "#C00000"
+  }
+ ],
+ "activities": [
+  {
+   "id": "a_1822bb9321",
+   "dataset": "ds_f440f9fd0a",
+   "code": "R100",
+   "name": "Clear & grub",
+   "start": "2027-03-08T00:00",
+   "finish": "2027-05-31T00:00",
+   "ch0_m": 0,
+   "ch1_m": 12200,
+   "style": "CLEAR",
+   "wbs": "",
+   "notes": "",
+   "qty": 12200,
+   "qty_unit": "m",
+   "rate": 145.2,
+   "rate_unit": "m/day",
+   "label": null,
+   "footprint": null,
+   "locked": false,
+   "p6": null
+  },
+  {
+   "id": "a_b5f6e94371",
+   "dataset": "ds_f440f9fd0a",
+   "code": "R200",
+   "name": "Earthworks Stage 1",
+   "start": "2027-04-12T00:00",
+   "finish": "2027-08-30T00:00",
+   "ch0_m": 0,
+   "ch1_m": 5200,
+   "style": "EARTH",
+   "wbs": "",
+   "notes": "",
+   "qty": 5200,
+   "qty_unit": "m",
+   "rate": 37.1,
+   "rate_unit": "m/day",
+   "label": null,
+   "footprint": null,
+   "locked": false,
+   "p6": null
+  },
+  {
+   "id": "a_fbf33cac4e",
+   "dataset": "ds_f440f9fd0a",
+   "code": "R210",
+   "name": "Earthworks Stage 2",
+   "start": "2027-06-07T00:00",
+   "finish": "2027-11-01T00:00",
+   "ch0_m": 5200,
+   "ch1_m": 7600,
+   "style": "EARTH",
+   "wbs": "",
+   "notes": "",
+   "qty": 2400,
+   "qty_unit": "m",
+   "rate": 16.3,
+   "rate_unit": "m/day",
+   "label": null,
+   "footprint": null,
+   "locked": false,
+   "p6": null
+  },
+  {
+   "id": "a_aa7fedc8f4",
+   "dataset": "ds_f440f9fd0a",
+   "code": "R220",
+   "name": "Earthworks Stage 3",
+   "start": "2027-08-02T00:00",
+   "finish": "2027-12-20T00:00",
+   "ch0_m": 7600,
+   "ch1_m": 12200,
+   "style": "EARTH",
+   "wbs": "",
+   "notes": "",
+   "qty": 4600,
+   "qty_unit": "m",
+   "rate": 32.9,
+   "rate_unit": "m/day",
+   "label": null,
+   "footprint": null,
+   "locked": false,
+   "p6": null
+  },
+  {
+   "id": "a_9256c187b4",
+   "dataset": "ds_f440f9fd0a",
+   "code": "R300",
+   "name": "Drainage",
+   "start": "2027-05-10T00:00",
+   "finish": "2027-12-13T00:00",
+   "ch0_m": 0,
+   "ch1_m": 12200,
+   "style": "DRAIN",
+   "wbs": "",
+   "notes": "",
+   "qty": 12200,
+   "qty_unit": "m",
+   "rate": 56.2,
+   "rate_unit": "m/day",
+   "label": null,
+   "footprint": null,
+   "locked": false,
+   "p6": null
+  },
+  {
+   "id": "a_7c5d5088e8",
+   "dataset": "ds_f440f9fd0a",
+   "code": "R400",
+   "name": "Subbase",
+   "start": "2027-09-06T00:00",
+   "finish": "2028-02-28T00:00",
+   "ch0_m": 0,
+   "ch1_m": 12200,
+   "style": "SUBBASE",
+   "wbs": "",
+   "notes": "",
+   "qty": 12200,
+   "qty_unit": "m",
+   "rate": 69.7,
+   "rate_unit": "m/day",
+   "label": null,
+   "footprint": null,
+   "locked": false,
+   "p6": null
+  },
+  {
+   "id": "a_2760d192d6",
+   "dataset": "ds_f440f9fd0a",
+   "code": "R500",
+   "name": "Basecourse",
+   "start": "2027-10-04T00:00",
+   "finish": "2028-03-27T00:00",
+   "ch0_m": 0,
+   "ch1_m": 12200,
+   "style": "BASE",
+   "wbs": "",
+   "notes": "",
+   "qty": 12200,
+   "qty_unit": "m",
+   "rate": 69.7,
+   "rate_unit": "m/day",
+   "label": null,
+   "footprint": null,
+   "locked": false,
+   "p6": null
+  },
+  {
+   "id": "a_1af6c28396",
+   "dataset": "ds_f440f9fd0a",
+   "code": "R600",
+   "name": "Asphalt wearing course",
+   "start": "2028-02-07T00:00",
+   "finish": "2028-05-15T00:00",
+   "ch0_m": 0,
+   "ch1_m": 12200,
+   "style": "ASPHALT",
+   "wbs": "",
+   "notes": "",
+   "qty": 12200,
+   "qty_unit": "m",
+   "rate": 124.5,
+   "rate_unit": "m/day",
+   "label": null,
+   "footprint": null,
+   "locked": false,
+   "p6": null
+  },
+  {
+   "id": "a_a04b7b3bba",
+   "dataset": "ds_f440f9fd0a",
+   "code": "B100",
+   "name": "Creek bridge",
+   "start": "2027-05-03T00:00",
+   "finish": "2027-11-29T00:00",
+   "ch0_m": 3380,
+   "ch1_m": 3580,
+   "style": "BRIDGE",
+   "wbs": "",
+   "notes": "",
+   "qty": 200,
+   "qty_unit": "m",
+   "rate": 1,
+   "rate_unit": "m/day",
+   "label": null,
+   "footprint": null,
+   "locked": false,
+   "p6": null
+  },
+  {
+   "id": "a_c302a0f37e",
+   "dataset": "ds_f440f9fd0a",
+   "code": "B200",
+   "name": "Interchange bridges",
+   "start": "2027-06-14T00:00",
+   "finish": "2028-01-31T00:00",
+   "ch0_m": 6300,
+   "ch1_m": 6700,
+   "style": "BRIDGE",
+   "wbs": "",
+   "notes": "",
+   "qty": 400,
+   "qty_unit": "m",
+   "rate": 1.7,
+   "rate_unit": "m/day",
+   "label": null,
+   "footprint": null,
+   "locked": false,
+   "p6": null
+  },
+  {
+   "id": "a_b1431ba415",
+   "dataset": "ds_f440f9fd0a",
+   "code": "B300",
+   "name": "Rail overpass",
+   "start": "2027-07-05T00:00",
+   "finish": "2028-02-21T00:00",
+   "ch0_m": 9130,
+   "ch1_m": 9260,
+   "style": "BRIDGE",
+   "wbs": "",
+   "notes": "",
+   "qty": 130,
+   "qty_unit": "m",
+   "rate": 0.6,
+   "rate_unit": "m/day",
+   "label": null,
+   "footprint": null,
+   "locked": false,
+   "p6": null
+  },
+  {
+   "id": "a_780682148e",
+   "dataset": "ds_f440f9fd0a",
+   "code": "T100",
+   "name": "Traffic switch – northbound",
+   "start": "2028-03-06T00:00",
+   "finish": "2028-03-07T00:00",
+   "ch0_m": 0,
+   "ch1_m": 7600,
+   "style": "TRAFFIC",
+   "wbs": "",
+   "notes": "",
+   "qty": 7600,
+   "qty_unit": "m",
+   "rate": 7600,
+   "rate_unit": "m/day",
+   "label": null,
+   "footprint": null,
+   "locked": false,
+   "p6": null
+  },
+  {
+   "id": "a_396f9fe054",
+   "dataset": "ds_f440f9fd0a",
+   "code": "T200",
+   "name": "Traffic switch – southbound",
+   "start": "2028-04-10T00:00",
+   "finish": "2028-04-11T00:00",
+   "ch0_m": 7600,
+   "ch1_m": 12200,
+   "style": "TRAFFIC",
+   "wbs": "",
+   "notes": "",
+   "qty": 4600,
+   "qty_unit": "m",
+   "rate": 4600,
+   "rate_unit": "m/day",
+   "label": null,
+   "footprint": null,
+   "locked": false,
+   "p6": null
+  }
+ ],
+ "productivities": [],
+ "page": {
+  "paper": "A3",
+  "orientation": "landscape",
+  "margins_mm": {
+   "top": 10,
+   "right": 10,
+   "bottom": 10,
+   "left": 10
+  },
+  "blocks": [
+   {
+    "id": "title",
+    "kind": "title",
+    "x": 0,
+    "y": 0,
+    "w": 0.72,
+    "h": 0.07,
+    "text": "{title}",
+    "font_size": 22,
+    "bold": true,
+    "border": false
+   },
+   {
+    "id": "titleblock",
+    "kind": "titleblock",
+    "x": 0.72,
+    "y": 0,
+    "w": 0.28,
+    "h": 0.07,
+    "border": true
+   },
+   {
+    "id": "chart",
+    "kind": "chart",
+    "x": 0,
+    "y": 0.08,
+    "w": 0.82,
+    "h": 0.92,
+    "border": true
+   },
+   {
+    "id": "legend",
+    "kind": "legend",
+    "x": 0.83,
+    "y": 0.08,
+    "w": 0.17,
+    "h": 0.6,
+    "border": true
+   },
+   {
+    "id": "notes",
+    "kind": "text",
+    "title": "Notes",
+    "show_title": true,
+    "shrink": true,
+    "x": 0.83,
+    "y": 0.69,
+    "w": 0.17,
+    "h": 0.31,
+    "text": "Example project with made-up data.\nEarthworks show as blocks by stage; pavement layers as lines.\nSubbase shows a 400 m footprint behind its work front.",
+    "font_size": 9,
+    "border": true
+   }
+  ]
+ },
+ "p6": null,
+ "header_image": null
+}

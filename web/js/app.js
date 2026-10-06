@@ -53,7 +53,7 @@ let tt; function toast(msg) { const t = $("#toast"); t.textContent = msg; t.hidd
 
 // ------------------------------------------------------------------ menus
 const MENU = {
-  File: [["New project…", "Ctrl+N", () => D.projectSetup(app, "new")], ["Open project…", "Ctrl+O", () => D.openProject(app)],
+  File: [["New project…", "Ctrl+N", () => D.projectSetup(app, "new")], ["New from example…", "", () => D.examples(app)], ["Open project…", "Ctrl+O", () => D.openProject(app)],
     ["Open project file from my PC…", "", () => openFromPc()], ["Save to a file on my PC…", "", () => need() && linkFile()], ["Reload from file", "", () => need() && reloadFile()], ["Download a copy (.json)", "", () => need() && exportFile("json")], "-", ["Duplicate project", "", () => need() && api.duplicate(app.p.id).then(p => { app.open(p); toast("Copy opened"); })], "-",
     ["Import Excel workbook…", "", () => D.importExcel(app)], ["Import from P6 (XER) with mapping…", "", () => D.p6Dialog(app, "import")], ["Import TurboChart (.tchart)…", "", () => D.importTchart(app)], ["Open project file (.json)…", "", () => D.importJson(app)], "-",
     ["Export P6 XER (main data set)", "", () => need() && exportFile("xer", app.p.view.main_dataset)], ["Export TurboChart (.tchart)", "", () => need() && exportFile("tchart")], 
@@ -555,7 +555,7 @@ function wire() {
   $("#ds-cmp").onchange = e => { app.p.view.compare_dataset = e.target.value || null; app.changed(); };
   $$("#ptabs button").forEach(b => b.addEventListener("click", () => tab(b.dataset.tab)));
   $$("#viewtabs button").forEach(b => b.addEventListener("click", () => setView(b.dataset.view)));
-  $("#e-new").onclick = () => D.projectSetup(app, "new"); $("#e-file").onclick = () => openFromPc(); $("#e-open").onclick = () => D.openProject(app);
+  $("#e-new").onclick = () => D.projectSetup(app, "new"); $("#e-file").onclick = () => openFromPc(); $("#e-example").onclick = () => D.examples(app); $("#e-open").onclick = () => D.openProject(app);
   $("#e-excel").onclick = () => D.importExcel(app); $("#e-p6").onclick = () => D.p6Dialog(app, "import"); $("#e-tc").onclick = () => D.importTchart(app);
   let rt; addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => app.p && (app.view === "page" ? pv.draw() : drawChart()), 150); });
 }

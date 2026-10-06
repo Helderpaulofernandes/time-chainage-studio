@@ -1,0 +1,17 @@
+[
+ {
+  "file": "rail-resleepering.tcs.json",
+  "name": "Rail – re-sleepering, two options",
+  "text": "60 km line, loops and level crossings, possession bands, re-sleepering footprint, Option A vs Option B."
+ },
+ {
+  "file": "road-highway.tcs.json",
+  "name": "Road – highway duplication",
+  "text": "12 km upgrade in three stages: earthworks blocks, pavement layers, bridges and traffic switches."
+ },
+ {
+  "file": "tunnel-twin-tbm.tcs.json",
+  "name": "Tunnel – twin-tube TBM",
+  "text": "6 km twin tubes with a mid shaft, fault zone, cross passages, TBM footprints and fit-out."
+ }
+]
