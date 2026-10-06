@@ -4,3 +4,6 @@ __pycache__/
 *.pyc
 .venv/
 .claude/settings.local.json
+
+# local test files, never published
+web/_test/

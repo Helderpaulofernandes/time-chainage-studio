@@ -2,18 +2,27 @@
 
 A time–chainage display for Primavera P6 schedules, for rail, road and tunnel work. P6 stays the master: dates come from P6, and chainage and activity style come from fields you map. There is no scheduling logic here.
 
-## Run it
+## Use it
 
-Double-click `run.bat`, or from this folder:
+**Open https://helderpaulofernandes.github.io/time-chainage-studio/** in Edge or Chrome. Nothing to install; everything runs in your browser and your files never leave your PC.
+
+**Where your work is kept**
+
+* Every project is kept in your browser on that PC as you work.
+* When you create or import a project, the app offers to **save it to a file on your PC** (for example in OneDrive). From then on every change is written to that file automatically. Open the file again later with **File → Open project file from my PC**, or send it to someone.
+* If the browser asks again for permission to write to the file (after you close it), click **Keep saving to …** in the status bar.
+* Firefox and Safari cannot write straight to a file; use **File → Download a copy (.json)** there.
+
+## Run it locally (optional)
+
+The same app can be served from your PC, for example with no internet access. Double-click `run.bat`, or from this folder:
 
 ```bash
 python -m pip install -r requirements.txt
 python -m uvicorn server.main:app --port 8765
 ```
 
-Then open http://localhost:8765. The API reference is at http://localhost:8765/docs.
-
-Projects are saved as JSON in `data/projects/` (or `~/.time-chainage-studio` if that folder is read-only). Set `TCS_DATA` to keep them somewhere else, e.g. a shared drive.
+Then open http://localhost:8765. The Python server in `server/` also offers the same imports and exports as a REST API (http://localhost:8765/docs), kept for a future shared back end (SharePoint or Azure); the browser app does not need it.
 
 ## What it does (phase 1)
 
@@ -52,7 +61,11 @@ Exported XERs carry three UDFs (`Start Chainage (m)`, `End Chainage (m)`, `Activ
 ## Project layout
 
 ```
-server/   FastAPI app: model, store, xer, tchart, excel_import
-web/      browser front end (plain ES modules, no build step)
-run.bat   start the server and open the browser
+web/                the app (plain ES modules, no build step); published to GitHub Pages
+web/js/core/        model, P6 XER, TurboChart and Excel import/export, all in the browser
+web/js/api.js       project storage (browser IndexedDB + optional linked file on your PC)
+server/             optional Python REST API with the same imports/exports
+.github/workflows/  publishes web/ to GitHub Pages on every push
 ```
+
+Excel reading uses [SheetJS](https://sheetjs.com) and [JSZip](https://stuk.github.io/jszip/), loaded from cdnjs.

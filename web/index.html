@@ -19,10 +19,11 @@
   <div id="empty" class="empty">
     <div>
       <h1>Time–chainage display for P6</h1>
-      <p>Show a P6 programme against chainage for rail, road or tunnel work. Dates stay in P6. You map the fields once, then sync when P6 changes. Activities can show productivity rates, labels that follow their slope, and the footprint of the work as it moves.</p>
+      <p>Runs in your browser; nothing to install. Show a P6 programme against chainage for rail, road or tunnel work. Dates stay in P6. You map the fields once, then sync when P6 changes. Activities can show productivity rates, labels that follow their slope, and the footprint of the work as it moves.</p>
       <div class="btns">
         <button type="button" class="primary" id="e-new">New project…</button>
         <button type="button" id="e-open">Open project…</button>
+        <button type="button" id="e-file">Open project file from my PC…</button>
       </div>
       <div class="btns">
         <button type="button" id="e-p6">Import from P6 (XER)…</button>
@@ -68,10 +69,13 @@
     </div>
   </div>
 
-  <footer class="statusbar"><span id="st-cursor"></span><span id="st-count"></span><span id="st-save"></span></footer>
+  <footer class="statusbar"><span id="st-cursor"></span><span id="st-count"></span><span id="st-save"></span><span id="st-file"></span></footer>
 </div>
 <div id="print-root"></div>
 <div id="toast" class="toast" hidden></div>
+<!-- Excel reading (SheetJS) and zip access for the drawn shapes in a workbook (JSZip) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script type="module" src="js/app.js"></script>
 </body>
 </html>

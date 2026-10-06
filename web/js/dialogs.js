@@ -108,7 +108,7 @@ export async function projectSetup(app, mode = "new") {
           revision: val(el, "ps-rev"), author: val(el, "ps-author") };
         if (mode === "new") {
           const np = await api.create({ name: val(el, "ps-name"), discipline: val(el, "ps-disc"), start_m: c0, end_m: c1, unit: chainage.unit, start: t0, finish: t1, chainage, time, meta, sections });
-          close(); app.open(np);
+          close(); app.open(np, true);
         } else {
           app.commit();
           Object.assign(app.p.chainage, chainage); Object.assign(app.p.time, time); Object.assign(app.p.meta, meta);
@@ -129,10 +129,10 @@ export async function openProject(app) {
       const tb = h("tbody");
       list.forEach(x => tb.append(h("tr", {},
         h("td", {}, h("button", { type: "button", class: "link", onclick: async () => { app.open(await api.get(x.id)); $("dialog.modal")?.close(); $("dialog.modal")?.remove(); } }, x.name)),
-        h("td", {}, x.discipline), h("td", { class: "n" }, x.activities), h("td", { class: "n" }, new Date(x.modified * 1000).toLocaleString()),
+        h("td", {}, x.discipline), h("td", { class: "n" }, x.activities), h("td", { class: "n" }, x.modified ? new Date(x.modified).toLocaleString() : ""), h("td", {}, x.file || "in this browser only"),
         h("td", {}, h("button", { type: "button", class: "small", onclick: async () => { const d = await api.duplicate(x.id); app.open(d); $("dialog.modal")?.close(); $("dialog.modal")?.remove(); } }, "Duplicate"),
           " ", h("button", { type: "button", class: "small danger", onclick: async e => { if (await confirmBox("Delete project", `Delete "${x.name}"? This cannot be undone.`, "Delete")) { await api.remove(x.id); e.target.closest("tr").remove(); } } }, "Delete")))));
-      el.append(h("table", { class: "grid-tbl" }, h("thead", {}, h("tr", {}, h("th", {}, "Project"), h("th", {}, "Type"), h("th", {}, "Activities"), h("th", {}, "Modified"), h("th", {}))), tb));
+      el.append(h("table", { class: "grid-tbl" }, h("thead", {}, h("tr", {}, h("th", {}, "Project"), h("th", {}, "Type"), h("th", {}, "Activities"), h("th", {}, "Modified"), h("th", {}, "Saved to"), h("th", {}))), tb));
     },
     buttons: [{ label: "Close" }],
   });
@@ -149,7 +149,7 @@ export function importExcel(app) {
     buttons: [{ label: "Cancel" }, { label: "Import", primary: true, onClick: async ({ close, setMsg, dlg }) => {
       const f = $("#ix-file", dlg).files[0]; if (!f) return setMsg("Choose a workbook first.", "err");
       setMsg("Reading the workbook…");
-      const p = await api.importExcel(f, val(dlg, "ix-disc")); close(); app.open(p);
+      const p = await api.importExcel(f, val(dlg, "ix-disc")); close(); app.open(p, true);
       app.toast(`Imported ${p.activities.length} activities in ${p.datasets.length} option${p.datasets.length > 1 ? "s" : ""}.`);
     } }],
   });
@@ -162,7 +162,7 @@ export function importTchart(app) {
       field("Positions in the file are", sel("it-unit", [["auto", "Work it out from the suffix"], ["m", "metres"], ["km", "kilometres"]], "auto"))),
     buttons: [{ label: "Cancel" }, { label: "Import", primary: true, onClick: async ({ close, setMsg, dlg }) => {
       const f = $("#it-file", dlg).files[0]; if (!f) return setMsg("Choose a .tchart file first.", "err");
-      const p = await api.importTchart(f, val(dlg, "it-unit")); close(); app.open(p);
+      const p = await api.importTchart(f, val(dlg, "it-unit")); close(); app.open(p, true);
     } }],
   });
 }
@@ -171,7 +171,7 @@ export function importJson(app) {
   modal({ title: "Open project file", body: el => el.append(field("Project file (.tcs.json)", h("input", { type: "file", id: "ij-file", accept: ".json" }))),
     buttons: [{ label: "Cancel" }, { label: "Open", primary: true, onClick: async ({ close, setMsg, dlg }) => {
       const f = $("#ij-file", dlg).files[0]; if (!f) return setMsg("Choose a file first.", "err");
-      const p = await api.importJson(f); close(); app.open(p);
+      const p = await api.importJson(f); close(); app.open(p, true);
     } }] });
 }
 
@@ -264,7 +264,7 @@ export function p6Dialog(app, mode = "import") {
           if (target === "current" && app.p) body.project_id = app.p.id;
           else body.setup = { name: val(dlg, "p6-pname") || insp.file, discipline: val(dlg, "p6-disc"), unit: val(dlg, "p6-unit2") };
           const r = await api.p6Import(body);
-          close(); app.open(r.project); app.toast(`Imported ${r.count} activities from P6.`);
+          close(); app.open(r.project, !body.project_id); app.toast(`Imported ${r.count} activities from P6.`);
         }
       } }],
   });

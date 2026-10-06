@@ -10,7 +10,7 @@ const app = {
   commit() { this.pushUndo(JSON.stringify(this.p)); },
   pushUndo(s) { this.undoS.push(s); if (this.undoS.length > 80) this.undoS.shift(); this.redoS = []; },
   changed(rerender = true) { this.saveState = "Unsaved changes"; status(); save(); if (rerender) render(); },
-  open(p) { this.p = p; this.rev = p.rev || 0; this.stale = false; this.sel = null; this.undoS = []; this.redoS = []; try { localStorage.setItem("tcs-last", p.id); } catch (e) { /* storage blocked */ } this.saveState = "Saved"; render(); },
+  open(p, fresh = false) { this.p = p; this.rev = p.rev || 0; this.stale = false; this.file = null; refreshFile(fresh); this.sel = null; this.undoS = []; this.redoS = []; try { localStorage.setItem("tcs-last", p.id); } catch (e) { /* storage blocked */ } this.saveState = "Saved"; render(); },
   load(p) { this.commit(); this.p = p; this.rev = p.rev || 0; this.sel = null; render(); },
   rev: 0, stale: false, // server revision of the copy this window last read or saved; undo never changes it
   toast,
@@ -24,7 +24,13 @@ const save = debounce(async () => {
     app.p.rev = app.rev;
     const s = await api.save(app.p);
     app.rev = app.p.rev = s.rev;
-    app.saveState = "Saved " + new Date().toLocaleTimeString().slice(0, 5); status();
+    const t = new Date().toLocaleTimeString().slice(0, 5), f = s._file || {};
+    if (s.file_conflict) { app.saveState = `Saved in this browser ${t}; not written to the file`; toast(s.file_conflict); }
+    else if (f.saved) app.saveState = `Saved to ${f.name} ${t}`;
+    else if (f.needsPermission) { app.saveState = `Saved in this browser ${t}`; app.file = { name: f.name, permission: "prompt" }; }
+    else if (f.error) app.saveState = `Saved in this browser ${t}; file error: ${f.error}`;
+    else app.saveState = `Saved in this browser ${t}`;
+    status();
   } catch (e) {
     if (e.status === 409) {
       app.stale = true;
@@ -47,9 +53,10 @@ let tt; function toast(msg) { const t = $("#toast"); t.textContent = msg; t.hidd
 
 // ------------------------------------------------------------------ menus
 const MENU = {
-  File: [["New project…", "Ctrl+N", () => D.projectSetup(app, "new")], ["Open project…", "Ctrl+O", () => D.openProject(app)], ["Duplicate project", "", () => need() && api.duplicate(app.p.id).then(p => { app.open(p); toast("Copy opened"); })], "-",
+  File: [["New project…", "Ctrl+N", () => D.projectSetup(app, "new")], ["Open project…", "Ctrl+O", () => D.openProject(app)],
+    ["Open project file from my PC…", "", () => openFromPc()], ["Save to a file on my PC…", "", () => need() && linkFile()], ["Reload from file", "", () => need() && reloadFile()], ["Download a copy (.json)", "", () => need() && exportFile("json")], "-", ["Duplicate project", "", () => need() && api.duplicate(app.p.id).then(p => { app.open(p); toast("Copy opened"); })], "-",
     ["Import Excel workbook…", "", () => D.importExcel(app)], ["Import from P6 (XER) with mapping…", "", () => D.p6Dialog(app, "import")], ["Import TurboChart (.tchart)…", "", () => D.importTchart(app)], ["Open project file (.json)…", "", () => D.importJson(app)], "-",
-    ["Export P6 XER (main data set)", "", () => need() && exportFile("xer", `?dataset=${app.p.view.main_dataset}`)], ["Export TurboChart (.tchart)", "", () => need() && exportFile("tchart")], ["Export project file (.json)", "", () => need() && exportFile("json")],
+    ["Export P6 XER (main data set)", "", () => need() && exportFile("xer", app.p.view.main_dataset)], ["Export TurboChart (.tchart)", "", () => need() && exportFile("tchart")], 
     ["Export chart as SVG", "", () => need() && exportChartSvg()], "-",
     ["Page layout…", "Ctrl+L", () => need() && setView("page")], ["Print…", "Ctrl+P", () => need() && printPage(app.p)], ["Export page as PNG", "", () => need() && exportPng(app.p)]],
   Edit: [["Undo", "Ctrl+Z", undo], ["Redo", "Ctrl+Y", redo], "-", ["Duplicate selection", "Ctrl+D", () => dupSel()], ["Delete selection", "Del", () => delSel()]],
@@ -62,10 +69,41 @@ const MENU = {
   Data: [["Import from P6 (XER) with mapping…", "", () => D.p6Dialog(app, "import")], ["Sync from P6 (XER)…", "", () => need() && D.p6Dialog(app, "sync")], "-",
     ["Data sets (options)", "", () => need() && tab("ds")], ["Productivity library", "", () => need() && D.productivities(app)]],
   Project: [["Project setup…", "", () => need() && D.projectSetup(app, "edit")], ["Header image…", "", () => need() && D.headerImage(app)], ["Activity styles", "", () => need() && tab("styles")], ["Locations and types", "", () => need() && tab("locs")]],
-  Help: [["Keyboard shortcuts", "", () => shortcuts()], ["API documentation", "", () => window.open("/docs", "_blank")]],
+  Help: [["Keyboard shortcuts", "", () => shortcuts()], ["Source code on GitHub", "", () => window.open("https://github.com/Helderpaulofernandes/time-chainage-studio", "_blank")]],
 };
 function need() { if (!app.p) { toast("Open or create a project first."); return false; } return true; }
-function exportFile(kind, q = "") { const a = h("a", { href: api.exportUrl(app.p.id, kind, q) }); document.body.append(a); a.click(); a.remove(); }
+async function exportFile(kind, datasetId) { const f = await api.exportFile(app.p, kind, datasetId); download(f.name, f.blob); }
+
+// ---- linked file on the user's PC (Chrome / Edge): every save is written to it
+async function refreshFile(offer) {
+  const p = app.p; if (!p) return;
+  app.file = api.filesSupported ? await api.fileStatus(p.id) : null;
+  status();
+  if (offer && api.filesSupported && !app.file) offerFile();
+}
+function offerFile() {
+  D.modal({ title: "Keep this project in a file?", body: el => el.append(
+      h("p", {}, "Choose where to save this project on your PC, for example in OneDrive. Every change is then saved to that file automatically, and you can open the file again later or send it to someone."),
+      h("p", { class: "hint" }, "Without a file, the project is kept only in this browser on this PC.")),
+    buttons: [{ label: "Not now" }, { label: "Choose file…", primary: true, onClick: async ({ close }) => { close(); await linkFile(); } }] });
+}
+async function linkFile() {
+  if (!api.filesSupported) { toast("This browser cannot save straight to a file. Use File → Download a copy instead, or open the app in Edge or Chrome."); return; }
+  try { const r = await api.linkNewFile(app.p); app.file = { name: r.name, permission: "granted" }; app.saveState = `Saved to ${r.name}`; status(); toast(`Changes now save to ${r.name} automatically.`); }
+  catch (e) { if (e.name !== "AbortError") toast(e.message); }
+}
+async function openFromPc() {
+  if (!api.filesSupported) return D.importJson(app);
+  try { const p = await api.openFile(); app.open(p); toast("Opened. Changes save back to that file automatically."); }
+  catch (e) { if (e.name !== "AbortError") toast(e.message); }
+}
+async function reconnectFile() {
+  if (await api.reconnect(app.p.id)) { app.file.permission = "granted"; app.changed(false); toast(`Saving to ${app.file.name} again.`); }
+}
+async function reloadFile() {
+  if (!app.file) return toast("This project is not linked to a file. Use File → Save to a file on my PC first.");
+  try { app.open(await api.reloadFromFile(app.p.id)); toast(`Reloaded from ${app.file ? app.file.name : "the file"}.`); } catch (e) { toast(e.message); }
+}
 function toggle(k) { app.p.view[k] = app.p.view[k] === false; app.changed(); }
 
 function buildMenus() {
@@ -134,6 +172,10 @@ function status() {
   $("#st-save").textContent = p ? app.saveState : "";
   $("#st-count").textContent = p ? `${p.activities.filter(a => a.dataset === p.view.main_dataset).length} activities in view · ${p.activities.length} total` : "";
   $("#b-undo").disabled = !app.undoS.length; $("#b-redo").disabled = !app.redoS.length;
+  const fe = $("#st-file"); fe.innerHTML = "";
+  if (p && app.file) fe.append(app.file.permission === "granted" ? h("span", { title: "Every change is saved to this file" }, "File: " + app.file.name)
+    : h("button", { type: "button", class: "small primary", onclick: reconnectFile, title: "The browser needs your OK again before it writes to the file" }, `Keep saving to ${app.file.name}`));
+  else if (p && api.filesSupported) fe.append(h("button", { type: "button", class: "small", onclick: linkFile }, "Save to a file on my PC…"));
 }
 
 function zoomT(f) { if (!need()) return; app.p.time.px_per_day = +clamp(app.p.time.px_per_day * f, 0.05, 40).toFixed(3); app.changed(); }
@@ -485,7 +527,7 @@ function dsPanel(box) {
       h("div", { class: "btns" },
         h("button", { type: "button", disabled: d.id === p.view.main_dataset, onclick: () => { p.view.main_dataset = d.id; if (p.view.compare_dataset === d.id) p.view.compare_dataset = null; app.changed(); } }, "Show as main"),
         h("button", { type: "button", disabled: d.id === p.view.main_dataset, onclick: () => { p.view.compare_dataset = p.view.compare_dataset === d.id ? null : d.id; app.changed(); } }, p.view.compare_dataset === d.id ? "Stop comparing" : "Compare behind"),
-        h("button", { type: "button", onclick: () => exportFile("xer", `?dataset=${d.id}`) }, "Export XER"),
+        h("button", { type: "button", onclick: () => exportFile("xer", d.id) }, "Export XER"),
         d.mapping ? h("button", { type: "button", onclick: () => D.p6Dialog(app, "sync") }, "Sync from P6") : null,
         h("button", { type: "button", onclick: () => { app.commit(); const nd = { id: uid("ds_"), name: d.name + " (copy)", source: "copy" }; p.datasets.push(nd);
           p.activities.filter(a => a.dataset === d.id).forEach(a => p.activities.push({ ...JSON.parse(JSON.stringify(a)), id: uid("a_"), dataset: nd.id, locked: false })); app.changed(); toast("Data set copied. Edit the copy freely as a what-if option."); } }, "Copy as option"),
@@ -513,14 +555,14 @@ function wire() {
   $("#ds-cmp").onchange = e => { app.p.view.compare_dataset = e.target.value || null; app.changed(); };
   $$("#ptabs button").forEach(b => b.addEventListener("click", () => tab(b.dataset.tab)));
   $$("#viewtabs button").forEach(b => b.addEventListener("click", () => setView(b.dataset.view)));
-  $("#e-new").onclick = () => D.projectSetup(app, "new"); $("#e-open").onclick = () => D.openProject(app);
+  $("#e-new").onclick = () => D.projectSetup(app, "new"); $("#e-file").onclick = () => openFromPc(); $("#e-open").onclick = () => D.openProject(app);
   $("#e-excel").onclick = () => D.importExcel(app); $("#e-p6").onclick = () => D.p6Dialog(app, "import"); $("#e-tc").onclick = () => D.importTchart(app);
   let rt; addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => app.p && (app.view === "page" ? pv.draw() : drawChart()), 150); });
 }
 
 (async function start() {
   wire();
-  try { app.presets = await api.presets(); } catch (e) { toast("The server is not answering. Start it with run.bat."); }
+  app.presets = await api.presets();
   let last = null; try { last = localStorage.getItem("tcs-last"); } catch (e) { /* storage blocked */ }
   if (last) { try { app.open(await api.get(last)); return; } catch (e) { /* project gone */ } }
   render();
