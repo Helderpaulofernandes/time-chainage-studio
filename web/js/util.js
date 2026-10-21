@@ -13,9 +13,14 @@ export function tms(s) {
 }
 export function tstr(ms) { return new Date(ms).toISOString().slice(0, 16); }
 export function dstr(ms) { return new Date(ms).toISOString().slice(0, 10); }
+// Date order follows the open project: "dmy" (5 Apr 27), "mdy" (Apr 5, 27, US) or "ymd" (2027-04-05).
+let DATE_ORDER = "dmy";
+export function setDateOrder(o) { DATE_ORDER = o || "dmy"; }
 export function niceDate(ms, withYear = true) {
-  const d = new Date(ms);
-  return `${d.getUTCDate()} ${MON[d.getUTCMonth()]}` + (withYear ? ` ${String(d.getUTCFullYear()).slice(2)}` : "");
+  const d = new Date(ms), dd = d.getUTCDate(), mon = MON[d.getUTCMonth()], yy = String(d.getUTCFullYear()).slice(2);
+  if (DATE_ORDER === "ymd") return withYear ? new Date(ms).toISOString().slice(0, 10) : new Date(ms).toISOString().slice(5, 10);
+  if (DATE_ORDER === "mdy") return `${mon} ${dd}` + (withYear ? `, ${yy}` : "");
+  return `${dd} ${mon}` + (withYear ? ` ${yy}` : "");
 }
 // A finish is exclusive (midnight after the last day); show the last working day instead.
 export function niceFinish(ms) { return niceDate(ms - 60000); }
@@ -26,13 +31,46 @@ export function isoWeek(ms) {
   return 1 + Math.round(((d - y) / DAY - 3 + ((new Date(y).getUTCDay() + 6) % 7)) / 7);
 }
 
-export function chFmt(p, m, withPrefix = false) {
-  const c = p.chainage; const k = c.unit === "km" ? 1000 : 1;
-  const v = (m / k).toFixed(c.decimals ?? (c.unit === "km" ? 3 : 0));
-  return (withPrefix && c.prefix ? c.prefix : "") + v;
+// ---- chainage / stationing. Stored in metres; shown in the project's unit and format.
+//   unit: m | km | ft | mi.  format: "decimal" (232.135, MP 12.40) or "station":
+//   feet -> US stations of 100 ft ("12+34.56" = 1,234.56 ft); metres -> metric stations of 1 km ("12+345" = 12,345 m).
+export const UNITS = { m: { factor: 1, name: "metres", len: "m" }, km: { factor: 1000, name: "kilometres", len: "m" },
+  ft: { factor: 0.3048, name: "feet", len: "ft" }, mi: { factor: 1609.344, name: "miles", len: "ft" } };
+export const unitFactor = u => (UNITS[u] || UNITS.m).factor;
+const isStation = c => c.format === "station" && (c.unit === "ft" || c.unit === "m" || c.unit === "km");
+const stationBase = c => (c.unit === "ft" ? 100 : 1000); // ft stations are 100 ft; metric stations are 1 km
+function stationText(c, m) {
+  const v = c.unit === "ft" ? m / 0.3048 : m, base = stationBase(c), dec = c.decimals ?? (c.unit === "ft" ? 2 : 0);
+  const neg = v < 0, a = Math.abs(v), sta = Math.floor(a / base + 1e-9), rest = a - sta * base;
+  const r = rest.toFixed(dec), [ip, fp] = r.split(".");
+  return (neg ? "-" : "") + sta + "+" + ip.padStart(base === 100 ? 2 : 3, "0") + (fp ? "." + fp : "");
 }
-export function chToM(p, v) { const n = parseFloat(v); return isNaN(n) ? null : n * (p.chainage.unit === "km" ? 1000 : 1); }
-export function mToCh(p, m) { return m == null ? "" : +(m / (p.chainage.unit === "km" ? 1000 : 1)).toFixed(6); }
+export function chFmt(p, m, withPrefix = false) {
+  const c = p.chainage;
+  const v = isStation(c) ? stationText(c, m) : (m / unitFactor(c.unit)).toFixed(c.decimals ?? (c.unit === "km" ? 3 : c.unit === "mi" ? 2 : 0));
+  return (withPrefix && c.prefix ? c.prefix + " " : "") + v;
+}
+// Full label for read-outs: "CH 232.135 km", "STA 12+34.56", "MP 12.40 mi"
+export function chLabel(p, m) { const c = p.chainage; return chFmt(p, m, true) + (isStation(c) ? "" : " " + c.unit); }
+// Axis caption after the prefix: "km", or "ft" for STA 12+34.56 stations
+export function chUnitLabel(p) { const c = p.chainage; return isStation(c) ? (c.unit === "ft" ? "ft" : "m") : c.unit; }
+// A length (not a position) in the display unit, e.g. for section lengths
+export function lenFmt(p, m) { const c = p.chainage, u = c.unit === "mi" ? "mi" : c.unit === "ft" ? "ft" : c.unit; const v = m / unitFactor(u);
+  return `${(+v.toFixed(u === "km" || u === "mi" ? 1 : 0)).toLocaleString()} ${u}`; }
+// Lengths for quantities and rates: metres on metric projects, feet on US ones
+export const lenUnit = p => UNITS[p.chainage.unit]?.len || "m";
+export const lenFromM = (p, m) => (lenUnit(p) === "ft" ? m / 0.3048 : m);
+// Parse what a user typed: a number in the project unit, or a station ("12+34.56" ft, "12+345" metric)
+export function chToM(p, v) {
+  const c = p.chainage, s = String(v ?? "").trim().replace(/,/g, "").replace(/^(ch|sta|mp|km)\s*/i, "");
+  if (s === "") return null;
+  const st = s.match(/^(-?)(\d+)\+(\d+(?:\.\d+)?)$/);
+  if (st) { const sign = st[1] ? -1 : 1, base = c.unit === "ft" || c.unit === "mi" ? 100 : 1000, n = +st[2] * base + +st[3]; return sign * (base === 100 ? n * 0.3048 : n); }
+  const n = parseFloat(s); return isNaN(n) ? null : n * unitFactor(c.unit);
+}
+// Value for an input box: a station string on station projects, otherwise a plain number in the project unit
+export function mToCh(p, m) { if (m == null) return ""; return isStation(p.chainage) ? stationText(p.chainage, m) : +(m / unitFactor(p.chainage.unit)).toFixed(6); }
+export const chIsStation = p => isStation(p.chainage);
 
 export const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 export const $ = (s, r = document) => r.querySelector(s);

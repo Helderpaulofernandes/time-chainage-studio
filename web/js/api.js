@@ -63,7 +63,7 @@ export const api = {
   async put(p) { p = normalise(clone(p)); p.rev = (p.rev || 0) + 1; p.saved_at = Date.now(); await idbPut("projects", p); return p; },
   async create(body) {
     const p = newProject(body.name || "Untitled", body.discipline || "rail", +body.start_m || 0, +(body.end_m ?? 10000), body.start, body.finish, body.unit || "km");
-    for (const k of ["meta", "chainage", "time"]) if (body[k]) Object.assign(p[k], body[k]);
+    for (const k of ["meta", "chainage", "time", "locale"]) if (body[k]) Object.assign(p[k], body[k]);
     if (body.sections) p.sections = body.sections.map(s => ({ ...s, id: s.id || newId("s_") }));
     return api.put(p);
   },

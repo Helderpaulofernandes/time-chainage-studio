@@ -30,6 +30,9 @@ export const PRESETS = {
       ["TBMLAUNCH", "TBM assembly / launch", "block", "#B13A3A"]] },
 };
 PRESETS.other = { label: "Other linear asset", location_types: PRESETS.road.location_types, styles: PRESETS.road.styles };
+// Chainage units: everything is stored in metres; these say how to show it.
+export const UNIT_FACTOR = { m: 1, km: 1000, ft: 0.3048, mi: 1609.344 };
+export const unitFactor = u => UNIT_FACTOR[u] || 1;
 export const PAPER_MM = { A4: [297, 210], A3: [420, 297], A2: [594, 420], A1: [841, 594], A0: [1189, 841], Letter: [279, 216], Ledger: [432, 279], "ANSI D": [864, 559] };
 
 export function makeStyle(code, name, kind = "line", colour = "#1F6E8C", extra = {}) {
@@ -62,13 +65,15 @@ export function newProject(name = "Untitled", discipline = "rail", chStart = 0, 
   return {
     schema: SCHEMA_VERSION, id: newId("prj_"), name, discipline, rev: 0,
     meta: { title: name, subtitle: "", client: "", contract: "", revision: "A", author: "", data_date: "" },
-    chainage: { start_m: chStart, end_m: chEnd, unit, prefix: "CH", decimals: unit === "km" ? 3 : 0, major_m: step * 2, minor_m: step, reverse: false, snap_m: 10 },
-    time: { start, finish, px_per_day: 2, orientation: "down", week_start: 1, week_labels: "project", shade_weekends: false, work_days_per_week: 7, tz: "Australia/Melbourne" },
+    chainage: { start_m: chStart, end_m: chEnd, unit, format: unit === "ft" ? "station" : "decimal", prefix: unit === "ft" ? "STA" : unit === "mi" ? "MP" : "CH",
+      decimals: unit === "km" ? 3 : unit === "mi" || unit === "ft" ? 2 : 0, major_m: step * 2, minor_m: step, reverse: false, snap_m: 10 },
+    locale: { date_order: unit === "ft" || unit === "mi" ? "mdy" : "dmy" },
+    time: { start, finish, px_per_day: 2, orientation: "down", week_start: unit === "ft" || unit === "mi" ? 0 : 1, week_labels: "project", shade_weekends: false, work_days_per_week: 7, tz: "Australia/Melbourne" },
     location_types: JSON.parse(JSON.stringify(preset.location_types)), location_rows: 4,
     styles: preset.styles.map(([c, n, k, col]) => makeStyle(c, n, k, col)),
     datasets: [{ id: ds, name: "Main", source: "manual" }],
     view: { main_dataset: ds, compare_dataset: null, show_footprints: true, show_labels: true, show_time_markers: true, show_location_grid: true },
-    sections: [], locations: [], time_markers: [], activities: [], productivities: [], page: defaultPage(), p6: null, header_image: null,
+    sections: [], locations: [], time_markers: [], activities: [], productivities: [], page: { ...defaultPage(), paper: unit === "ft" || unit === "mi" ? "Ledger" : "A3" }, p6: null, header_image: null,
   };
 }
 
@@ -81,6 +86,7 @@ export function makeActivity(dataset, code, name, start, finish, ch0_m, ch1_m, s
 export function normalise(p) {
   const base = newProject(p.name || "Untitled", p.discipline || "rail");
   for (const [k, v] of Object.entries(base)) if (!(k in p)) p[k] = v;
+  if (!p.locale) p.locale = { date_order: "dmy" };
   for (const k of ["meta", "chainage", "time", "view"]) for (const [kk, vv] of Object.entries(base[k])) if (!(kk in p[k])) p[k][kk] = vv;
   p.styles.forEach(s => {
     const ref = makeStyle(s.code || "X", s.name || "", s.kind || "line", s.colour || "#1F6E8C");

@@ -1,6 +1,6 @@
 // Modal dialogs: project setup, open, imports, P6 field mapping and sync, productivities.
 import { api } from "./api.js";
-import { h, esc, $, $$, chFmt, chToM, mToCh, uid, tms, niceDate, niceFinish } from "./util.js";
+import { h, esc, $, $$, chFmt, chToM, mToCh, uid, tms, niceDate, niceFinish, unitFactor, setDateOrder, chIsStation } from "./util.js";
 
 // ------------------------------------------------------------------ modal framework
 export function modal({ title, body, buttons = [], wide = false, onClose }) {
@@ -43,10 +43,13 @@ const chk = (root, id) => !!$("#" + id, root)?.checked;
 export async function projectSetup(app, mode = "new") {
   const presets = app.presets || (app.presets = await api.presets());
   const p = mode === "edit" ? app.p : null;
-  const c = p?.chainage || { start_m: 0, end_m: 10000, unit: "km", prefix: "CH", decimals: 3, major_m: 1000, minor_m: 500, reverse: false, snap_m: 10 };
-  const t = p?.time || { start: new Date().toISOString().slice(0, 8) + "01", finish: "", px_per_day: 2, orientation: "down", week_labels: "project", shade_weekends: false, work_days_per_week: 7 };
-  const k = c.unit === "km" ? 1000 : 1;
+  const c = p?.chainage || { start_m: 0, end_m: 10000, unit: "km", format: "decimal", prefix: "CH", decimals: 3, major_m: 1000, minor_m: 500, reverse: false, snap_m: 10 };
+  const t = p?.time || { start: new Date().toISOString().slice(0, 8) + "01", finish: "", px_per_day: 2, orientation: "down", week_labels: "project", shade_weekends: false, work_days_per_week: 7, week_start: 1 };
+  const loc = p?.locale || { date_order: "dmy" };
   let sections = (p?.sections || []).map(s => ({ ...s }));
+  let curUnit = c.unit || "km";
+  const F = u => unitFactor(u), SNAP = u => (u === "ft" || u === "mi" ? 0.3048 : 1); // snap is in m (metric) or ft (US)
+  const num = (v, d = 6) => +(+v).toFixed(d);
   modal({
     title: mode === "new" ? "New project" : "Project setup", wide: true,
     body: el => {
@@ -60,59 +63,87 @@ export async function projectSetup(app, mode = "new") {
             h("div", { class: "row2" }, field("Client", inp("ps-client", p?.meta.client || "")), field("Contract", inp("ps-contract", p?.meta.contract || ""))),
             h("div", { class: "row2" }, field("Revision", inp("ps-rev", p?.meta.revision || "A")), field("Prepared by", inp("ps-author", p?.meta.author || ""))),
             mode === "new" ? field("Asset type", disc, "Sets the location marker types and a starter activity style library. Both can be edited later.") : null),
-          h("fieldset", {}, h("legend", {}, "Chainage range"),
-            h("div", { class: "row2" }, field("Unit", sel("ps-unit", [["km", "km"], ["m", "m"]], c.unit)), field("Prefix", inp("ps-prefix", c.prefix || ""))),
-            h("div", { class: "row2" }, field("Start", inp("ps-c0", c.start_m / k, { type: "number", step: "any" })), field("End", inp("ps-c1", c.end_m / k, { type: "number", step: "any" }))),
-            h("div", { class: "row2" }, field("Major tick", inp("ps-maj", c.major_m / k, { type: "number", step: "any" })), field("Minor tick", inp("ps-min", c.minor_m / k, { type: "number", step: "any" }))),
-            h("div", { class: "row2" }, field("Decimals", inp("ps-dec", c.decimals, { type: "number", min: 0, max: 4 })), field("Drag snap (m)", inp("ps-snap", c.snap_m, { type: "number", step: "any" }))),
+          h("fieldset", {}, h("legend", {}, "Chainage / stationing"),
+            field("Units", sel("ps-region", [["", "Choose a preset…"], ["metric", "Metric: chainage in km, dates 5 Apr 27, week starts Monday"],
+              ["us", "US: stationing in feet (12+34.56), dates Apr 5, 27, week starts Sunday"], ["us-mp", "US rail: mileposts in miles (MP 12.40), US dates"]], "")),
+            h("div", { class: "row2" }, field("Unit", sel("ps-unit", [["km", "kilometres (km)"], ["m", "metres (m)"], ["ft", "feet (ft)"], ["mi", "miles (mi)"]], curUnit)),
+              field("Show as", sel("ps-fmt", [["decimal", "Decimal (232.135)"], ["station", "Stations (12+34.56 ft / 12+345 m)"]], c.format || "decimal"))),
+            h("div", { class: "row2" }, field("Prefix", inp("ps-prefix", c.prefix || "")), field("Decimals", inp("ps-dec", c.decimals, { type: "number", min: 0, max: 4 }))),
+            h("div", { class: "row2" }, field("Start", inp("ps-c0", num(c.start_m / F(curUnit)), { type: "number", step: "any" })), field("End", inp("ps-c1", num(c.end_m / F(curUnit)), { type: "number", step: "any" }))),
+            h("div", { class: "row2" }, field("Major tick", inp("ps-maj", num(c.major_m / F(curUnit)), { type: "number", step: "any" })), field("Minor tick", inp("ps-min", num(c.minor_m / F(curUnit)), { type: "number", step: "any" }))),
+            field("Drag snap", inp("ps-snap", num((c.snap_m || 0) / SNAP(curUnit), 3), { type: "number", step: "any" }), "In metres on metric projects, feet on US ones."),
+            h("small", { class: "hint" }, "Start, end, ticks and section limits are in the unit above."),
             h("label", { class: "chk" }, h("input", { type: "checkbox", id: "ps-rev2", checked: c.reverse }), " Chainage decreases to the right")),
           h("fieldset", {}, h("legend", {}, "Time range"),
             h("div", { class: "row2" }, field("Start", inp("ps-t0", t.start, { type: "date" })), field("Finish", inp("ps-t1", t.finish, { type: "date" }))),
             h("div", { class: "row2" }, field("Scale (px per day)", inp("ps-ppd", t.px_per_day, { type: "number", step: "0.1", min: "0.1" })),
               field("Time runs", sel("ps-or", [["down", "Down the page"], ["up", "Up the page"]], t.orientation))),
             h("div", { class: "row2" }, field("Week labels", sel("ps-wk", [["project", "Project weeks"], ["iso", "ISO weeks"], ["date", "Week commencing"]], t.week_labels)),
+              field("Week starts", sel("ps-ws", [["1", "Monday"], ["0", "Sunday"]], String(t.week_start ?? 1)))),
+            h("div", { class: "row2" }, field("Dates shown as", sel("ps-do", [["dmy", "5 Apr 27"], ["mdy", "Apr 5, 27 (US)"], ["ymd", "2027-04-05"]], loc.date_order || "dmy")),
               field("Working days / week", inp("ps-wd", t.work_days_per_week, { type: "number", step: "0.5", min: 1, max: 7 }), "Used when a productivity rate sets a duration.")),
             h("label", { class: "chk" }, h("input", { type: "checkbox", id: "ps-we", checked: t.shade_weekends }), " Shade weekends"))),
         h("fieldset", {}, h("legend", {}, "Sections"),
           h("p", { class: "hint" }, "Section markers are the bands across the top of the chart, e.g. work sections, contract portions or tunnel drives."),
           h("table", { class: "grid-tbl" }, h("thead", {}, h("tr", {}, h("th", {}, "Name"), h("th", {}, "From"), h("th", {}, "To"), h("th", {}))), h("tbody", { id: "ps-secs" })),
           h("button", { type: "button", onclick: () => { const last = sections.length ? Math.max(...sections.map(s => s.to_m)) : chToMx(); sections.push({ id: uid("s_"), name: `S${sections.length + 1}`, from_m: last, to_m: last + (cEnd() - last) / 2 }); drawSecs(); } }, "Add section")));
-      const unitK = () => (val(el, "ps-unit") === "km" ? 1000 : 1);
-      const chToMx = () => parseFloat(val(el, "ps-c0") || 0) * unitK();
-      const cEnd = () => parseFloat(val(el, "ps-c1") || 0) * unitK();
+      const chToMx = () => parseFloat(val(el, "ps-c0") || 0) * F(curUnit);
+      const cEnd = () => parseFloat(val(el, "ps-c1") || 0) * F(curUnit);
       function drawSecs() {
         const tb = $("#ps-secs", el); tb.innerHTML = "";
         sections.forEach((s, i) => tb.append(h("tr", {},
           h("td", {}, h("input", { value: s.name, oninput: e => (s.name = e.target.value) })),
-          h("td", {}, h("input", { type: "number", step: "any", value: +(s.from_m / unitK()).toFixed(4), oninput: e => (s.from_m = parseFloat(e.target.value) * unitK()) })),
-          h("td", {}, h("input", { type: "number", step: "any", value: +(s.to_m / unitK()).toFixed(4), oninput: e => (s.to_m = parseFloat(e.target.value) * unitK()) })),
+          h("td", {}, h("input", { type: "number", step: "any", value: num(s.from_m / F(curUnit), 4), oninput: e => (s.from_m = parseFloat(e.target.value) * F(curUnit)) })),
+          h("td", {}, h("input", { type: "number", step: "any", value: num(s.to_m / F(curUnit), 4), oninput: e => (s.to_m = parseFloat(e.target.value) * F(curUnit)) })),
           h("td", {}, h("button", { type: "button", class: "danger small", onclick: () => { sections.splice(i, 1); drawSecs(); } }, "Remove")))));
       }
+      // changing the unit re-expresses the same positions in the new unit
+      function setUnit(u) {
+        if (u === curUnit) return;
+        for (const id of ["ps-c0", "ps-c1", "ps-maj", "ps-min"]) { const n = parseFloat(val(el, id)); if (!isNaN(n)) $("#" + id, el).value = num(n * F(curUnit) / F(u), 4); }
+        const sn = parseFloat(val(el, "ps-snap")); if (!isNaN(sn)) $("#ps-snap", el).value = num(sn * SNAP(curUnit) / SNAP(u), 3);
+        curUnit = u; $("#ps-unit", el).value = u; drawSecs();
+      }
+      $("#ps-unit", el).addEventListener("change", e => setUnit(e.target.value));
+      $("#ps-region", el).addEventListener("change", e => {
+        const r = e.target.value; if (!r) return;
+        const us = r !== "metric", mp = r === "us-mp", u = r === "metric" ? "km" : mp ? "mi" : "ft";
+        setUnit(u);
+        $("#ps-fmt", el).value = r === "us" ? "station" : "decimal";
+        $("#ps-prefix", el).value = r === "metric" ? "CH" : mp ? "MP" : "STA";
+        $("#ps-dec", el).value = r === "metric" ? 3 : 2;
+        $("#ps-do", el).value = us ? "mdy" : "dmy"; $("#ps-ws", el).value = us ? "0" : "1";
+        if (r === "us") { $("#ps-maj", el).value = 5000; $("#ps-min", el).value = 1000; $("#ps-snap", el).value = 10; }
+        if (mp) { $("#ps-maj", el).value = 10; $("#ps-min", el).value = 1; $("#ps-snap", el).value = 50; }
+        if (r === "metric") $("#ps-snap", el).value = 10;
+      });
       drawSecs();
-      $("#ps-unit", el).addEventListener("change", drawSecs);
     },
     buttons: [{ label: "Cancel" }, {
       label: mode === "new" ? "Create project" : "Apply", primary: true, onClick: async ({ close, setMsg, dlg }) => {
-        const el = dlg;
-        const kk = val(el, "ps-unit") === "km" ? 1000 : 1;
+        const el = dlg, u = val(el, "ps-unit"), kk = F(u);
         const c0 = parseFloat(val(el, "ps-c0")) * kk, c1 = parseFloat(val(el, "ps-c1")) * kk;
         const t0 = val(el, "ps-t0"), t1 = val(el, "ps-t1");
         if (!val(el, "ps-name").trim()) return setMsg("Give the project a name.", "err");
-        if (!(c1 > c0)) return setMsg("The chainage end must be greater than the start.", "err");
+        if (!(c1 > c0)) return setMsg("The end must be greater than the start.", "err");
         if (!t0 || !t1 || t1 <= t0) return setMsg("The finish date must be after the start date.", "err");
-        const chainage = { start_m: c0, end_m: c1, unit: val(el, "ps-unit"), prefix: val(el, "ps-prefix"), decimals: +val(el, "ps-dec") || 0,
-          major_m: parseFloat(val(el, "ps-maj")) * kk || 0, minor_m: parseFloat(val(el, "ps-min")) * kk || 0, reverse: chk(el, "ps-rev2"), snap_m: parseFloat(val(el, "ps-snap")) || 0 };
+        const chainage = { start_m: c0, end_m: c1, unit: u, format: val(el, "ps-fmt"), prefix: val(el, "ps-prefix"), decimals: +val(el, "ps-dec") || 0,
+          major_m: parseFloat(val(el, "ps-maj")) * kk || 0, minor_m: parseFloat(val(el, "ps-min")) * kk || 0, reverse: chk(el, "ps-rev2"),
+          snap_m: (parseFloat(val(el, "ps-snap")) || 0) * SNAP(u) };
         const time = { start: t0, finish: t1, px_per_day: parseFloat(val(el, "ps-ppd")) || 2, orientation: val(el, "ps-or"), week_labels: val(el, "ps-wk"),
-          shade_weekends: chk(el, "ps-we"), work_days_per_week: parseFloat(val(el, "ps-wd")) || 7 };
+          week_start: +val(el, "ps-ws"), shade_weekends: chk(el, "ps-we"), work_days_per_week: parseFloat(val(el, "ps-wd")) || 7 };
+        const locale = { date_order: val(el, "ps-do") };
         const meta = { title: val(el, "ps-title") || val(el, "ps-name"), subtitle: val(el, "ps-sub"), client: val(el, "ps-client"), contract: val(el, "ps-contract"),
           revision: val(el, "ps-rev"), author: val(el, "ps-author") };
         if (mode === "new") {
-          const np = await api.create({ name: val(el, "ps-name"), discipline: val(el, "ps-disc"), start_m: c0, end_m: c1, unit: chainage.unit, start: t0, finish: t1, chainage, time, meta, sections });
+          const np = await api.create({ name: val(el, "ps-name"), discipline: val(el, "ps-disc"), start_m: c0, end_m: c1, unit: u, start: t0, finish: t1, chainage, time, meta, sections, locale });
           close(); app.open(np, true);
         } else {
           app.commit();
           Object.assign(app.p.chainage, chainage); Object.assign(app.p.time, time); Object.assign(app.p.meta, meta);
+          app.p.locale = { ...(app.p.locale || {}), ...locale };
           app.p.name = val(el, "ps-name"); app.p.sections = sections;
+          setDateOrder(locale.date_order);
           close(); app.changed();
         }
       } }],
@@ -179,7 +210,7 @@ export function importTchart(app) {
   modal({
     title: "Import TurboChart file",
     body: el => el.append(field("TurboChart file (.tchart)", h("input", { type: "file", id: "it-file", accept: ".tchart,.json" })),
-      field("Positions in the file are", sel("it-unit", [["auto", "Work it out from the suffix"], ["m", "metres"], ["km", "kilometres"]], "auto"))),
+      field("Positions in the file are", sel("it-unit", [["auto", "Work it out from the suffix"], ["m", "metres"], ["km", "kilometres"], ["ft", "feet"], ["mi", "miles"]], "auto"))),
     buttons: [{ label: "Cancel" }, { label: "Import", primary: true, onClick: async ({ close, setMsg, dlg }) => {
       const f = $("#it-file", dlg).files[0]; if (!f) return setMsg("Choose a .tchart file first.", "err");
       const p = await api.importTchart(f, val(dlg, "it-unit")); close(); app.open(p, true);
@@ -303,7 +334,7 @@ function drawMapping(el, insp, m, mode) {
       h("fieldset", {}, h("legend", {}, "Chainage"),
         field("Start chainage", sourcePicker("p6-cs", d, m.ch_start, ["none", "udf", "code", "field"])),
         field("End chainage", sourcePicker("p6-ce", d, m.ch_end, ["none", "udf", "code", "field"])),
-        field("Values are in", sel("p6-unit", [["m", "metres"], ["km", "kilometres"]], m.ch_unit), "Text like CH232.135 or 12+345 is read too."),
+        field("Values are in", sel("p6-unit", [["m", "metres"], ["km", "kilometres"], ["ft", "feet"], ["mi", "miles"]], m.ch_unit), "Stations are read too: 12+34.56 is 1,234.56 ft when the unit is feet, and 12+345 is 12,345 m otherwise."),
         h("label", { class: "chk" }, h("input", { type: "checkbox", id: "p6-skip", checked: m.skip_without_chainage !== false }), " Leave out activities with no chainage")),
       h("fieldset", {}, h("legend", {}, "Style and filter"),
         field("Activity style (shape code)", sourcePicker("p6-st", d, m.style, ["none", "udf", "code", "wbs"])),
@@ -316,7 +347,7 @@ function drawMapping(el, insp, m, mode) {
         field("Data set name", inp("p6-dsname", m.dataset_name || insp.file.replace(/\.xer$/i, ""))),
         field("New project name", inp("p6-pname", insp.file.replace(/\.xer$/i, "")))),
       h("div", { class: "row3" }, field("Asset type", sel("p6-disc", [["rail", "Rail"], ["road", "Road"], ["tunnel", "Tunnel"], ["other", "Other"]], "rail")),
-        field("Display chainage in", sel("p6-unit2", [["km", "km"], ["m", "m"]], "km")))) : null);
+        field("Display chainage in", sel("p6-unit2", [["km", "km"], ["m", "m"], ["ft", "ft (US stations)"], ["mi", "mi (mileposts)"]], ["ft", "mi"].includes(m.ch_unit) ? m.ch_unit : "km")))) : null);
   box._pickers = { cs: $("#p6-cs-src", box).parentElement, ce: $("#p6-ce-src", box).parentElement, st: $("#p6-st-src", box).parentElement, fl: $("#p6-fl-src", box).parentElement };
 }
 
@@ -394,8 +425,8 @@ export function headerImage(app) {
           h("fieldset", {}, h("legend", {}, "Placement"),
             field("Stretch across", sel("hi-fit", [["chainage", "Between these chainages"], ["full", "The full chart width"]], cur.fit || "chainage")),
             h("div", { class: "row2" },
-              field(`Left edge chainage (${c.unit})`, inp("hi-c0", mToCh(p, cur.ch_start_m ?? c.start_m), { type: "number", step: "any" })),
-              field(`Right edge chainage (${c.unit})`, inp("hi-c1", mToCh(p, cur.ch_end_m ?? c.end_m), { type: "number", step: "any" }))),
+              field(`Left edge (${chIsStation(p) ? "station" : c.unit})`, inp("hi-c0", mToCh(p, cur.ch_start_m ?? c.start_m), chIsStation(p) ? { type: "text" } : { type: "number", step: "any" })),
+              field(`Right edge (${chIsStation(p) ? "station" : c.unit})`, inp("hi-c1", mToCh(p, cur.ch_end_m ?? c.end_m), chIsStation(p) ? { type: "text" } : { type: "number", step: "any" }))),
             h("small", { class: "hint" }, "Use the chainages that the image's own left and right edges represent.")),
           h("fieldset", {}, h("legend", {}, "Size and look"),
             field("Height (px on screen)", inp("hi-h", cur.height_px || "", { type: "number", min: 10, placeholder: "automatic, keeps proportions" })),

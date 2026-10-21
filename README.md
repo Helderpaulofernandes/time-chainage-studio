@@ -45,6 +45,18 @@ Then open http://localhost:8765. The Python server in `server/` also offers the 
 | Page layout (paper, margins, title, title block, chart, legend, notes), print, SVG/PNG export | done |
 | Live P6 connection (EPPM web services, Primavera Cloud REST, P6 Pro database) | next phase |
 
+## Units (metric and US)
+
+Project → Project setup → **Chainage / stationing** has presets:
+
+| Preset | Shown as | Dates | Week starts |
+|---|---|---|---|
+| Metric | CH 232.135 km (or stations 12+345 m) | 5 Apr 27 | Monday |
+| US | STA 12+34.56 (100 ft stations) | Apr 5, 27 | Sunday |
+| US rail | MP 12.40 mi | Apr 5, 27 | Sunday |
+
+Positions are always stored in metres, so a project can switch units at any time. On station projects you can type a station (`12+34.56`) or a plain number of feet. Quantities and rates follow the project: m and m/day on metric projects, ft and ft/day on US ones. P6 chainage fields can be in m, km, ft or mi; station text in P6 is read too.
+
 ## P6 field mapping
 
 Data → Import from P6 (XER). Choose:

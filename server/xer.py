@@ -134,6 +134,7 @@ class _Lookup:
         return None
 
 
+UNIT_FACTOR = {"m": 1.0, "km": 1000.0, "ft": 0.3048, "mi": 1609.344}
 _KM_PLUS = re.compile(r"(-?\d+)\+(\d+(?:\.\d+)?)")
 _NUM = re.compile(r"-?\d+(?:\.\d+)?")
 
@@ -144,12 +145,14 @@ def chainage_to_m(raw: str | None, unit: str) -> float | None:
         return None
     s = str(raw).replace(",", "")
     m = _KM_PLUS.search(s)
-    if m:
+    if m:  # stations: 12+34.56 is 100 ft stations in US units, otherwise km + m
+        if unit in ("ft", "mi"):
+            return (float(m.group(1)) * 100 + float(m.group(2))) * 0.3048
         return float(m.group(1)) * 1000 + float(m.group(2))
     m = _NUM.search(s)
     if not m:
         return None
-    return float(m.group(0)) * (1000.0 if unit == "km" else 1.0)
+    return float(m.group(0)) * UNIT_FACTOR.get(unit, 1.0)
 
 
 def _date(task: dict, field: str) -> str | None:
@@ -272,7 +275,7 @@ def write(project: dict, dataset_id: str | None = None) -> bytes:
     ds_name = next((d["name"] for d in project["datasets"] if d["id"] == ds), "Main")
     m = (project.get("p6") or {}).get("mapping") or {}
     unit = m.get("ch_unit", "m")
-    scale = 1000.0 if unit == "km" else 1.0
+    scale = UNIT_FACTOR.get(unit, 1.0)
     lab_s = (m.get("ch_start") or {}).get("label") or f"Start Chainage ({unit})"
     lab_e = (m.get("ch_end") or {}).get("label") or f"End Chainage ({unit})"
     lab_st = (m.get("style") or {}).get("label") or "Activity Style"

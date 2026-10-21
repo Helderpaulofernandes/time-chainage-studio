@@ -13,5 +13,15 @@
   "file": "tunnel-twin-tbm.tcs.json",
   "name": "Tunnel – twin-tube TBM",
   "text": "6 km twin tubes with a mid shaft, fault zone, cross passages, TBM footprints and fit-out."
+ },
+ {
+  "file": "us-road-highway.tcs.json",
+  "name": "US – highway widening (stations in feet)",
+  "text": "The highway example in US units: stationing 0+00 to 406+82, rates in ft/day, US dates, Ledger paper."
+ },
+ {
+  "file": "us-rail-tie-renewal.tcs.json",
+  "name": "US – rail tie renewal (mileposts)",
+  "text": "The rail example in US units: mileposts MP 62 to MP 99, rates in ft/day, US dates, weeks from Sunday."
  }
 ]

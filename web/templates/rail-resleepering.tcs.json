@@ -1,6 +1,6 @@
 {
  "schema": 1,
- "id": "prj_feb972a15f",
+ "id": "prj_e6cd473c1d",
  "name": "Example rail re-sleepering",
  "discipline": "rail",
  "rev": 0,
@@ -17,12 +17,16 @@
   "start_m": 98000,
   "end_m": 162000,
   "unit": "km",
+  "format": "decimal",
   "prefix": "CH",
   "decimals": 3,
   "major_m": 10000,
   "minor_m": 2000,
   "reverse": false,
   "snap_m": 10
+ },
+ "locale": {
+  "date_order": "dmy"
  },
  "time": {
   "start": "2027-02-01",
@@ -314,19 +318,19 @@
  ],
  "datasets": [
   {
-   "id": "ds_aea1a1c3e0",
+   "id": "ds_450f2147a2",
    "name": "Option A – one front, Ashford to Dale",
    "source": "manual"
   },
   {
-   "id": "ds_c08fc40e9b",
+   "id": "ds_7a3f29d777",
    "name": "Option B – two fronts from Cooper Jn",
    "source": "manual"
   }
  ],
  "view": {
-  "main_dataset": "ds_aea1a1c3e0",
-  "compare_dataset": "ds_c08fc40e9b",
+  "main_dataset": "ds_450f2147a2",
+  "compare_dataset": "ds_7a3f29d777",
   "show_footprints": true,
   "show_labels": true,
   "show_time_markers": true,
@@ -334,19 +338,19 @@
  },
  "sections": [
   {
-   "id": "s_7445a448ba",
+   "id": "s_16c71b6a0a",
    "name": "Ashford – Bell Creek",
    "from_m": 100000,
    "to_m": 118200
   },
   {
-   "id": "s_07f5271a13",
+   "id": "s_30708380f5",
    "name": "Bell Creek – Cooper Jn",
    "from_m": 118200,
    "to_m": 137100
   },
   {
-   "id": "s_e212572345",
+   "id": "s_eb58ff9bde",
    "name": "Cooper Jn – Dale",
    "from_m": 137100,
    "to_m": 160000
@@ -354,7 +358,7 @@
  ],
  "locations": [
   {
-   "id": "l_38e02dba0e",
+   "id": "l_be9bf0cb67",
    "name": "Ashford",
    "ch_m": 100000,
    "to_m": null,
@@ -364,7 +368,7 @@
    "notes": ""
   },
   {
-   "id": "l_49696b2736",
+   "id": "l_eba5a97ccd",
    "name": "Ashford station",
    "ch_m": 100400,
    "to_m": null,
@@ -374,7 +378,7 @@
    "notes": ""
   },
   {
-   "id": "l_5d2612595e",
+   "id": "l_cae1ef3fbf",
    "name": "Bell Creek loop",
    "ch_m": 117800,
    "to_m": 118600,
@@ -384,7 +388,7 @@
    "notes": ""
   },
   {
-   "id": "l_287032787e",
+   "id": "l_a0abcf03df",
    "name": "Cooper Junction loop",
    "ch_m": 136600,
    "to_m": 137600,
@@ -394,7 +398,7 @@
    "notes": ""
   },
   {
-   "id": "l_86d951e71e",
+   "id": "l_d426657cd8",
    "name": "Dale station",
    "ch_m": 159600,
    "to_m": null,
@@ -404,7 +408,7 @@
    "notes": ""
   },
   {
-   "id": "l_a49cee146b",
+   "id": "l_7339f60f68",
    "name": "Dale",
    "ch_m": 160000,
    "to_m": null,
@@ -414,7 +418,7 @@
    "notes": ""
   },
   {
-   "id": "l_63691c8259",
+   "id": "l_83795048cd",
    "name": "Mill Rd",
    "ch_m": 103420,
    "to_m": null,
@@ -424,7 +428,7 @@
    "notes": ""
   },
   {
-   "id": "l_73b847689b",
+   "id": "l_602bd320d6",
    "name": "Highway 1",
    "ch_m": 109870,
    "to_m": null,
@@ -434,7 +438,7 @@
    "notes": ""
   },
   {
-   "id": "l_4a8b58b4b4",
+   "id": "l_77376328cb",
    "name": "Quarry Ln",
    "ch_m": 114050,
    "to_m": null,
@@ -444,7 +448,7 @@
    "notes": ""
   },
   {
-   "id": "l_6323a0b421",
+   "id": "l_d2c3ad8bbe",
    "name": "Station St",
    "ch_m": 122600,
    "to_m": null,
@@ -454,7 +458,7 @@
    "notes": ""
   },
   {
-   "id": "l_a50a831944",
+   "id": "l_0a38b55f98",
    "name": "Creek Rd",
    "ch_m": 128310,
    "to_m": null,
@@ -464,7 +468,7 @@
    "notes": ""
   },
   {
-   "id": "l_b431f8e431",
+   "id": "l_2bdb77e640",
    "name": "Ridge Rd",
    "ch_m": 133920,
    "to_m": null,
@@ -474,7 +478,7 @@
    "notes": ""
   },
   {
-   "id": "l_517a088082",
+   "id": "l_19b1c670a4",
    "name": "Farm access",
    "ch_m": 142150,
    "to_m": null,
@@ -484,7 +488,7 @@
    "notes": ""
   },
   {
-   "id": "l_7ea23537d3",
+   "id": "l_0397ae63fa",
    "name": "Old Coach Rd",
    "ch_m": 149700,
    "to_m": null,
@@ -494,7 +498,7 @@
    "notes": ""
   },
   {
-   "id": "l_d48b31f6a6",
+   "id": "l_1756421ae0",
    "name": "Dale Rd",
    "ch_m": 155380,
    "to_m": null,
@@ -504,7 +508,7 @@
    "notes": ""
   },
   {
-   "id": "l_728aa3b147",
+   "id": "l_52cd888c18",
    "name": "Bridge 1",
    "ch_m": 106100,
    "to_m": 106180,
@@ -514,7 +518,7 @@
    "notes": ""
   },
   {
-   "id": "l_b547ea268c",
+   "id": "l_d859c33b84",
    "name": "Bridge 2",
    "ch_m": 125400,
    "to_m": 125520,
@@ -524,7 +528,7 @@
    "notes": ""
   },
   {
-   "id": "l_5c05193790",
+   "id": "l_5f5681ab85",
    "name": "Bridge 3",
    "ch_m": 146800,
    "to_m": 146950,
@@ -534,7 +538,7 @@
    "notes": ""
   },
   {
-   "id": "l_49181540b5",
+   "id": "l_1d09f5340d",
    "name": "Box culvert",
    "ch_m": 131250,
    "to_m": null,
@@ -544,7 +548,7 @@
    "notes": ""
   },
   {
-   "id": "l_8eda5f378e",
+   "id": "l_8c8d3d9da4",
    "name": "Yard / laydown",
    "ch_m": 118000,
    "to_m": 118400,
@@ -556,7 +560,7 @@
  ],
  "time_markers": [
   {
-   "id": "t_af9ed86435",
+   "id": "t_a18c37c7be",
    "label": "Freight possession window (no access)",
    "kind": "band",
    "start": "2027-03-02T00:00",
@@ -566,7 +570,7 @@
    "colour": "#BF8F00"
   },
   {
-   "id": "t_0482bee36f",
+   "id": "t_663a089f55",
    "label": "Freight possession window (no access)",
    "kind": "band",
    "start": "2027-03-30T00:00",
@@ -576,7 +580,7 @@
    "colour": "#BF8F00"
   },
   {
-   "id": "t_c5e4d0ddf1",
+   "id": "t_5e97a53243",
    "label": "Freight possession window (no access)",
    "kind": "band",
    "start": "2027-04-27T00:00",
@@ -586,7 +590,7 @@
    "colour": "#BF8F00"
   },
   {
-   "id": "t_8196da81e1",
+   "id": "t_53a14cd619",
    "label": "Freight possession window (no access)",
    "kind": "band",
    "start": "2027-06-01T00:00",
@@ -596,7 +600,7 @@
    "colour": "#BF8F00"
   },
   {
-   "id": "t_96aa55a5b0",
+   "id": "t_4435589207",
    "label": "Freight possession window (no access)",
    "kind": "band",
    "start": "2027-06-29T00:00",
@@ -606,7 +610,7 @@
    "colour": "#BF8F00"
   },
   {
-   "id": "t_1b620018bd",
+   "id": "t_d3639989ef",
    "label": "Freight possession window (no access)",
    "kind": "band",
    "start": "2027-08-03T00:00",
@@ -616,7 +620,7 @@
    "colour": "#BF8F00"
   },
   {
-   "id": "t_6bdcfdcc29",
+   "id": "t_34d2a94708",
    "label": "Freight possession window (no access)",
    "kind": "band",
    "start": "2027-08-31T00:00",
@@ -626,7 +630,7 @@
    "colour": "#BF8F00"
   },
   {
-   "id": "t_4ea0547c3d",
+   "id": "t_7af2353a86",
    "label": "Main possession starts",
    "kind": "milestone",
    "start": "2027-04-05T00:00",
@@ -636,7 +640,7 @@
    "colour": "#C00000"
   },
   {
-   "id": "t_70ce231ccf",
+   "id": "t_4d1e23c175",
    "label": "Harvest restriction – east of Cooper Jn",
    "kind": "restriction",
    "start": "2027-10-04T00:00",
@@ -646,7 +650,7 @@
    "colour": "#C26A12"
   },
   {
-   "id": "t_b4281c98a3",
+   "id": "t_f00631b4dc",
    "label": "Practical completion",
    "kind": "milestone",
    "start": "2027-12-17T00:00",
@@ -658,8 +662,8 @@
  ],
  "activities": [
   {
-   "id": "a_51ef383f75",
-   "dataset": "ds_aea1a1c3e0",
+   "id": "a_9ab5c8d80f",
+   "dataset": "ds_450f2147a2",
    "code": "S10",
    "name": "Survey & dilapidation",
    "start": "2027-02-08T00:00",
@@ -679,8 +683,8 @@
    "p6": null
   },
   {
-   "id": "a_32555f466b",
-   "dataset": "ds_aea1a1c3e0",
+   "id": "a_6d937d1a33",
+   "dataset": "ds_450f2147a2",
    "code": "M10",
    "name": "Bell Creek yard establishment",
    "start": "2027-03-15T00:00",
@@ -700,8 +704,8 @@
    "p6": null
   },
   {
-   "id": "a_300bb8a763",
-   "dataset": "ds_aea1a1c3e0",
+   "id": "a_9592b8c568",
+   "dataset": "ds_450f2147a2",
    "code": "M20",
    "name": "Cooper Jn yard establishment",
    "start": "2027-03-15T00:00",
@@ -721,8 +725,8 @@
    "p6": null
   },
   {
-   "id": "a_4817649493",
-   "dataset": "ds_aea1a1c3e0",
+   "id": "a_a9b68aa36e",
+   "dataset": "ds_450f2147a2",
    "code": "H10",
    "name": "Final geometry run & certification",
    "start": "2027-11-15T00:00",
@@ -742,8 +746,8 @@
    "p6": null
   },
   {
-   "id": "a_faa16b057b",
-   "dataset": "ds_c08fc40e9b",
+   "id": "a_9de1ef438b",
+   "dataset": "ds_7a3f29d777",
    "code": "S10",
    "name": "Survey & dilapidation",
    "start": "2027-02-08T00:00",
@@ -763,8 +767,8 @@
    "p6": null
   },
   {
-   "id": "a_4bb84ff21c",
-   "dataset": "ds_c08fc40e9b",
+   "id": "a_900e8948b3",
+   "dataset": "ds_7a3f29d777",
    "code": "M10",
    "name": "Bell Creek yard establishment",
    "start": "2027-03-15T00:00",
@@ -784,8 +788,8 @@
    "p6": null
   },
   {
-   "id": "a_4a07fdf63d",
-   "dataset": "ds_c08fc40e9b",
+   "id": "a_38e6b26a13",
+   "dataset": "ds_7a3f29d777",
    "code": "M20",
    "name": "Cooper Jn yard establishment",
    "start": "2027-03-15T00:00",
@@ -805,8 +809,8 @@
    "p6": null
   },
   {
-   "id": "a_d9eb67b0a9",
-   "dataset": "ds_c08fc40e9b",
+   "id": "a_3cd38b2877",
+   "dataset": "ds_7a3f29d777",
    "code": "H10",
    "name": "Final geometry run & certification",
    "start": "2027-11-15T00:00",
@@ -826,8 +830,8 @@
    "p6": null
   },
   {
-   "id": "a_883eca37a4",
-   "dataset": "ds_aea1a1c3e0",
+   "id": "a_85d0a903cb",
+   "dataset": "ds_450f2147a2",
    "code": "C10",
    "name": "Drainage",
    "start": "2027-04-05T00:00",
@@ -847,8 +851,8 @@
    "p6": null
   },
   {
-   "id": "a_c927c331e4",
-   "dataset": "ds_aea1a1c3e0",
+   "id": "a_101bbf5231",
+   "dataset": "ds_450f2147a2",
    "code": "C20",
    "name": "Re-sleepering",
    "start": "2027-04-26T00:00",
@@ -868,8 +872,8 @@
    "p6": null
   },
   {
-   "id": "a_5a782036c2",
-   "dataset": "ds_aea1a1c3e0",
+   "id": "a_f42354c3d0",
+   "dataset": "ds_450f2147a2",
    "code": "C30",
    "name": "Ballast, lift & tamp",
    "start": "2027-05-17T00:00",
@@ -889,8 +893,8 @@
    "p6": null
   },
   {
-   "id": "a_fa818ed3bc",
-   "dataset": "ds_aea1a1c3e0",
+   "id": "a_b18696ab7c",
+   "dataset": "ds_450f2147a2",
    "code": "C40",
    "name": "Final tamp & regulate",
    "start": "2027-06-07T00:00",
@@ -910,8 +914,8 @@
    "p6": null
   },
   {
-   "id": "a_0bb8cb5682",
-   "dataset": "ds_c08fc40e9b",
+   "id": "a_179d10a471",
+   "dataset": "ds_7a3f29d777",
    "code": "C10",
    "name": "Drainage – west leg",
    "start": "2027-04-05T00:00",
@@ -931,8 +935,8 @@
    "p6": null
   },
   {
-   "id": "a_6e1cb33e4b",
-   "dataset": "ds_c08fc40e9b",
+   "id": "a_5b1109fa15",
+   "dataset": "ds_7a3f29d777",
    "code": "C11",
    "name": "Drainage – east leg",
    "start": "2027-06-14T00:00",
@@ -952,8 +956,8 @@
    "p6": null
   },
   {
-   "id": "a_c1c74f48c6",
-   "dataset": "ds_c08fc40e9b",
+   "id": "a_e42df15143",
+   "dataset": "ds_7a3f29d777",
    "code": "C20",
    "name": "Re-sleepering – west leg",
    "start": "2027-04-26T00:00",
@@ -973,8 +977,8 @@
    "p6": null
   },
   {
-   "id": "a_0db52344dd",
-   "dataset": "ds_c08fc40e9b",
+   "id": "a_fc80c88778",
+   "dataset": "ds_7a3f29d777",
    "code": "C21",
    "name": "Re-sleepering – east leg",
    "start": "2027-07-19T00:00",
@@ -994,8 +998,8 @@
    "p6": null
   },
   {
-   "id": "a_ae43eec463",
-   "dataset": "ds_c08fc40e9b",
+   "id": "a_556aa29b8f",
+   "dataset": "ds_7a3f29d777",
    "code": "C30",
    "name": "Ballast, lift & tamp – west leg",
    "start": "2027-05-17T00:00",
@@ -1015,8 +1019,8 @@
    "p6": null
   },
   {
-   "id": "a_6573998d0a",
-   "dataset": "ds_c08fc40e9b",
+   "id": "a_3ff36d2c32",
+   "dataset": "ds_7a3f29d777",
    "code": "C31",
    "name": "Ballast, lift & tamp – east leg",
    "start": "2027-08-09T00:00",
@@ -1036,8 +1040,8 @@
    "p6": null
   },
   {
-   "id": "a_a7cbf2d9f7",
-   "dataset": "ds_c08fc40e9b",
+   "id": "a_2fc6ee8abe",
+   "dataset": "ds_7a3f29d777",
    "code": "C40",
    "name": "Final tamp – west leg",
    "start": "2027-06-07T00:00",
@@ -1057,8 +1061,8 @@
    "p6": null
   },
   {
-   "id": "a_38b659f41c",
-   "dataset": "ds_c08fc40e9b",
+   "id": "a_031ebc2656",
+   "dataset": "ds_7a3f29d777",
    "code": "C41",
    "name": "Final tamp – east leg",
    "start": "2027-08-30T00:00",
@@ -1078,8 +1082,8 @@
    "p6": null
   },
   {
-   "id": "a_0a5f3b2a45",
-   "dataset": "ds_aea1a1c3e0",
+   "id": "a_78fc80a849",
+   "dataset": "ds_450f2147a2",
    "code": "X10",
    "name": "LX renewal 1",
    "start": "2027-05-03T00:00",
@@ -1099,8 +1103,8 @@
    "p6": null
   },
   {
-   "id": "a_6b273ab39c",
-   "dataset": "ds_c08fc40e9b",
+   "id": "a_192d3ac59e",
+   "dataset": "ds_7a3f29d777",
    "code": "X10",
    "name": "LX renewal 1",
    "start": "2027-05-03T00:00",
@@ -1120,8 +1124,8 @@
    "p6": null
   },
   {
-   "id": "a_e2870707fe",
-   "dataset": "ds_aea1a1c3e0",
+   "id": "a_0167b2c16c",
+   "dataset": "ds_450f2147a2",
    "code": "X20",
    "name": "LX renewal 2",
    "start": "2027-05-24T00:00",
@@ -1141,8 +1145,8 @@
    "p6": null
   },
   {
-   "id": "a_59dcb9a0f9",
-   "dataset": "ds_c08fc40e9b",
+   "id": "a_ead239e531",
+   "dataset": "ds_7a3f29d777",
    "code": "X20",
    "name": "LX renewal 2",
    "start": "2027-05-24T00:00",
@@ -1162,8 +1166,8 @@
    "p6": null
   },
   {
-   "id": "a_5d4545cc3d",
-   "dataset": "ds_aea1a1c3e0",
+   "id": "a_5647cd7be4",
+   "dataset": "ds_450f2147a2",
    "code": "X30",
    "name": "LX renewal 3",
    "start": "2027-06-21T00:00",
@@ -1183,8 +1187,8 @@
    "p6": null
   },
   {
-   "id": "a_b8e2bd78f6",
-   "dataset": "ds_c08fc40e9b",
+   "id": "a_0447ed71a4",
+   "dataset": "ds_7a3f29d777",
    "code": "X30",
    "name": "LX renewal 3",
    "start": "2027-06-21T00:00",
@@ -1204,8 +1208,8 @@
    "p6": null
   },
   {
-   "id": "a_ffebea3498",
-   "dataset": "ds_aea1a1c3e0",
+   "id": "a_6de1827fc3",
+   "dataset": "ds_450f2147a2",
    "code": "X40",
    "name": "LX renewal 4",
    "start": "2027-07-19T00:00",
@@ -1225,8 +1229,8 @@
    "p6": null
   },
   {
-   "id": "a_e31617483e",
-   "dataset": "ds_c08fc40e9b",
+   "id": "a_0951d6c1ef",
+   "dataset": "ds_7a3f29d777",
    "code": "X40",
    "name": "LX renewal 4",
    "start": "2027-07-19T00:00",
@@ -1246,8 +1250,8 @@
    "p6": null
   },
   {
-   "id": "a_472fbcb7a4",
-   "dataset": "ds_aea1a1c3e0",
+   "id": "a_ca4fa35dff",
+   "dataset": "ds_450f2147a2",
    "code": "X50",
    "name": "LX renewal 5",
    "start": "2027-08-30T00:00",
@@ -1267,8 +1271,8 @@
    "p6": null
   },
   {
-   "id": "a_daab9efd24",
-   "dataset": "ds_c08fc40e9b",
+   "id": "a_881ca09605",
+   "dataset": "ds_7a3f29d777",
    "code": "X50",
    "name": "LX renewal 5",
    "start": "2027-08-30T00:00",
@@ -1290,7 +1294,7 @@
  ],
  "productivities": [
   {
-   "id": "p_9b54eabf65",
+   "id": "p_6c5bdfa287",
    "activity": "Re-sleepering",
    "resources": "Sleeper exchange machine + 2 excavators",
    "rate_text": "3,000 sleepers/shift",
@@ -1301,7 +1305,7 @@
    "shifts": 30
   },
   {
-   "id": "p_f49c97b7c0",
+   "id": "p_665debf400",
    "activity": "Cess drain cleaning",
    "resources": "Excavator + roller",
    "rate_text": "750 m/shift",
@@ -1312,7 +1316,7 @@
    "shifts": 43
   },
   {
-   "id": "p_fe592d2322",
+   "id": "p_ca05878007",
    "activity": "Ballast, lift & tamp",
    "resources": "Ballast train + tamper",
    "rate_text": "2.0 km/day",

@@ -1,7 +1,10 @@
 // Time-Chainage Studio front end: menus, chart interaction, side panels, undo and autosave.
 import { api } from "./api.js";
 import { renderChart, renderLegend, geometry, styleMap } from "./render.js";
-import { DAY, tms, tstr, dstr, niceDate, niceFinish, chFmt, chToM, mToCh, esc, $, $$, h, uid, clamp, download, debounce, DOW } from "./util.js";
+import { DAY, tms, tstr, dstr, niceDate, niceFinish, chFmt, chToM, mToCh, chLabel, chIsStation, lenUnit, lenFromM, setDateOrder, esc, $, $$, h, uid, clamp, download, debounce, DOW } from "./util.js";
+// chainage inputs: text boxes on station projects ("12+34.56"), number boxes otherwise
+const chAttrs = (p, extra = {}) => (chIsStation(p) ? { type: "text", inputmode: "decimal", placeholder: p.chainage.unit === "ft" ? "12+34.56" : "12+345", ...extra } : { type: "number", step: "any", ...extra });
+const chName = p => (chIsStation(p) ? "station" : `chainage (${p.chainage.unit})`);
 import * as D from "./dialogs.js";
 import { pageView, printPage, exportPng, renderPage } from "./page.js";
 
@@ -10,8 +13,8 @@ const app = {
   commit() { this.pushUndo(JSON.stringify(this.p)); },
   pushUndo(s) { this.undoS.push(s); if (this.undoS.length > 80) this.undoS.shift(); this.redoS = []; },
   changed(rerender = true) { this.saveState = "Unsaved changes"; status(); save(); if (rerender) render(); },
-  open(p, fresh = false) { this.p = p; this.rev = p.rev || 0; this.stale = false; this.file = null; refreshFile(fresh); this.sel = null; this.undoS = []; this.redoS = []; try { localStorage.setItem("tcs-last", p.id); } catch (e) { /* storage blocked */ } this.saveState = "Saved"; render(); },
-  load(p) { this.commit(); this.p = p; this.rev = p.rev || 0; this.sel = null; render(); },
+  open(p, fresh = false) { setDateOrder((p.locale || {}).date_order); this.p = p; this.rev = p.rev || 0; this.stale = false; this.file = null; refreshFile(fresh); this.sel = null; this.undoS = []; this.redoS = []; try { localStorage.setItem("tcs-last", p.id); } catch (e) { /* storage blocked */ } this.saveState = "Saved"; render(); },
+  load(p) { this.commit(); setDateOrder((p.locale || {}).date_order); this.p = p; this.rev = p.rev || 0; this.sel = null; render(); },
   rev: 0, stale: false, // server revision of the copy this window last read or saved; undo never changes it
   toast,
 };
@@ -251,7 +254,7 @@ function readout(q) {
   ["x1", "x2"].forEach(k => xv.setAttribute(k, q.x)); ["y1", "y2"].forEach(k => xh.setAttribute(k, q.y));
   xv.removeAttribute("display"); xh.removeAttribute("display");
   const t = G.Yi(q.y), d = new Date(t);
-  $("#st-cursor").textContent = `${app.p.chainage.prefix || ""}${chFmt(app.p, G.Xi(q.x))} ${app.p.chainage.unit} · ${DOW[d.getUTCDay()]} ${niceDate(t)} ${String(d.getUTCHours()).padStart(2, "0")}:00`;
+  $("#st-cursor").textContent = `${chLabel(app.p, G.Xi(q.x))} · ${DOW[d.getUTCDay()]} ${niceDate(t)} ${String(d.getUTCHours()).padStart(2, "0")}:00`;
 }
 
 function setMode(m) { app.mode = m; $$("#tools button[data-mode]").forEach(b => b.setAttribute("aria-pressed", b.dataset.mode === m)); svgEl.classList.toggle("draw", m === "draw");
@@ -357,17 +360,17 @@ function actProps(box, a) {
     F("Start", I(dt(a.start), edit(a, "start"), { type: "datetime-local", disabled: a.locked })), F("Finish", I(dt(a.finish), v => { if (tms(v) < s) return toast("The finish must be after the start."); edit(a, "finish")(v); }, { type: "datetime-local", disabled: a.locked })),
     F("Duration (days)", I(+dur.toFixed(2), v => { const n = num(v); if (n == null || n < 0) return; edit(a, "finish")(tstr(s + n * DAY)); }, { type: "number", step: "0.5", min: 0, disabled: a.locked })),
     h("span"),
-    F(`From chainage (${p.chainage.unit})`, I(mToCh(p, a.ch0_m), v => { const m = chToM(p, v); if (m != null) edit(a, "ch0_m")(m); }, { type: "number", step: "any" })),
-    F(`To chainage (${p.chainage.unit})`, I(mToCh(p, a.ch1_m), v => { const m = chToM(p, v); if (m != null) edit(a, "ch1_m")(m); }, { type: "number", step: "any" }))));
+    F(`From ${chName(p)}`, I(mToCh(p, a.ch0_m), v => { const m = chToM(p, v); if (m != null) edit(a, "ch0_m")(m); }, chAttrs(p))),
+    F(`To ${chName(p)}`, I(mToCh(p, a.ch1_m), v => { const m = chToM(p, v); if (m != null) edit(a, "ch1_m")(m); }, chAttrs(p)))));
   // productivity
-  const len = Math.abs(a.ch1_m - a.ch0_m);
+  const len = Math.abs(a.ch1_m - a.ch0_m), lu = lenUnit(p), L = lenFromM(p, len);
   box.append(h("h3", {}, "Productivity"), h("div", { class: "fgrid" },
-    F("Quantity", I(a.qty, edit(a, "qty", num), { type: "number", step: "any" })), F("Unit", I(a.qty_unit, edit(a, "qty_unit"), { placeholder: "m, sleepers, t…" })),
-    F("Rate per working day", I(a.rate, edit(a, "rate", num), { type: "number", step: "any" })), F("Rate unit", I(a.rate_unit, edit(a, "rate_unit"), { placeholder: "m/day" }))),
-    h("p", { class: "hint" }, `Shown: ${Math.round(len).toLocaleString()} m over ${dur.toFixed(1)} days = ${dur > 0 ? Math.round(len / dur).toLocaleString() : "–"} m/day. Working days per week: ${p.time.work_days_per_week}.`),
+    F("Quantity", I(a.qty, edit(a, "qty", num), { type: "number", step: "any" })), F("Unit", I(a.qty_unit, edit(a, "qty_unit"), { placeholder: `${lu}, sleepers, t…` })),
+    F("Rate per working day", I(a.rate, edit(a, "rate", num), { type: "number", step: "any" })), F("Rate unit", I(a.rate_unit, edit(a, "rate_unit"), { placeholder: `${lu}/day` }))),
+    h("p", { class: "hint" }, `Shown: ${Math.round(L).toLocaleString()} ${lu} over ${dur.toFixed(1)} days = ${dur > 0 ? Math.round(L / dur).toLocaleString() : "–"} ${lu}/day. Working days per week: ${p.time.work_days_per_week}.`),
     h("div", { class: "btns" },
       h("button", { type: "button", disabled: a.locked || !a.qty || !a.rate, onclick: () => { const wd = (a.qty / a.rate) * 7 / (p.time.work_days_per_week || 7); edit(a, "finish")(tstr(s + wd * DAY)); toast(`Finish set from rate: ${wd.toFixed(1)} calendar days.`); } }, "Set finish from rate"),
-      h("button", { type: "button", onclick: () => { app.commit(); a.qty = Math.round(len); a.qty_unit = "m"; a.rate = dur > 0 ? +(len / dur * 7 / (p.time.work_days_per_week || 7)).toFixed(1) : null; a.rate_unit = "m/day"; app.changed(); } }, "Rate from the line")));
+      h("button", { type: "button", onclick: () => { app.commit(); a.qty = Math.round(L); a.qty_unit = lu; a.rate = dur > 0 ? +(L / dur * 7 / (p.time.work_days_per_week || 7)).toFixed(1) : null; a.rate_unit = `${lu}/day`; app.changed(); } }, "Rate from the line")));
   // label override
   const lab = { ...(st.label || {}), ...(a.label || {}) };
   const setLab = (k2, v) => { app.commit(); a.label = { ...(a.label || {}), [k2]: v }; app.changed(); };
@@ -395,8 +398,8 @@ function locProps(box, l) {
   const p = app.p;
   box.append(h("h3", {}, "Location marker"), h("div", { class: "fgrid" },
     h("div", { class: "full" }, F("Name", I(l.name, edit(l, "name")))),
-    F(`Chainage (${p.chainage.unit})`, I(mToCh(p, l.ch_m), v => { const m = chToM(p, v); if (m != null) edit(l, "ch_m")(m); }, { type: "number", step: "any" })),
-    F(`To (optional)`, I(mToCh(p, l.to_m), v => edit(l, "to_m")(v === "" ? null : chToM(p, v)), { type: "number", step: "any", placeholder: "point" })),
+    F(chName(p)[0].toUpperCase() + chName(p).slice(1), I(mToCh(p, l.ch_m), v => { const m = chToM(p, v); if (m != null) edit(l, "ch_m")(m); }, chAttrs(p))),
+    F(`To (optional)`, I(mToCh(p, l.to_m), v => edit(l, "to_m")(v === "" ? null : chToM(p, v)), chAttrs(p, { placeholder: "point" }))),
     F("Type", S(p.location_types.map(t => [t.id, t.name]), l.type, edit(l, "type"))),
     F("Row", S([["", "Type default"], ...Array.from({ length: p.location_rows }, (_, i) => [String(i + 1), `Row ${i + 1}`])], l.row ? String(l.row) : "", v => edit(l, "row")(v ? +v : null))),
     C(l.label, edit(l, "label"), "Show label"), C(l.grid ?? (p.location_types.find(t => t.id === l.type) || {}).grid, edit(l, "grid"), "Line down the grid"),
@@ -411,8 +414,8 @@ function mkProps(box, m) {
     F("Kind", S([["milestone", "Milestone"], ["band", "Band (access, interface)"], ["shutdown", "Stand-down / shutdown"], ["possession", "Possession"], ["restriction", "Restriction"]], m.kind, edit(m, "kind"))),
     F("Colour", I(m.colour || "#808080", edit(m, "colour"), { type: "color" })),
     F("Start", I((m.start || "").slice(0, 16), edit(m, "start"), { type: "datetime-local" })), F("Finish", I((m.finish || "").slice(0, 16), v => edit(m, "finish")(v || null), { type: "datetime-local" })),
-    F(`From chainage`, I(mToCh(p, m.ch0_m), v => edit(m, "ch0_m")(v === "" ? null : chToM(p, v)), { type: "number", step: "any", placeholder: "whole line" })),
-    F(`To chainage`, I(mToCh(p, m.ch1_m), v => edit(m, "ch1_m")(v === "" ? null : chToM(p, v)), { type: "number", step: "any", placeholder: "whole line" }))),
+    F(`From ${chName(p)}`, I(mToCh(p, m.ch0_m), v => edit(m, "ch0_m")(v === "" ? null : chToM(p, v)), chAttrs(p, { placeholder: "whole line" }))),
+    F(`To ${chName(p)}`, I(mToCh(p, m.ch1_m), v => edit(m, "ch1_m")(v === "" ? null : chToM(p, v)), chAttrs(p, { placeholder: "whole line" })))),
     h("div", { class: "btns" }, h("button", { type: "button", onclick: dupSel }, "Duplicate"), h("button", { type: "button", class: "danger", onclick: delSel }, "Delete")));
 }
 

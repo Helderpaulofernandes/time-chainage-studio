@@ -1,5 +1,5 @@
 // TurboChart .tchart import and export in the browser (field layout taken from TurboChart 2.4 files).
-import { makeActivity, makeStyle, newId, newProject, parseT, fmtT, DAY } from "./model.js";
+import { makeActivity, makeStyle, newId, newProject, parseT, fmtT, DAY, unitFactor } from "./model.js";
 
 const ZERO = "00000000-0000-0000-0000-000000000000";
 const gid = () => (crypto.randomUUID ? crypto.randomUUID() : "10000000-1000-4000-8000-100000000000".replace(/[018]/g, c => (c ^ (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (c / 4)))).toString(16)));
@@ -35,7 +35,7 @@ function fromTc(s, tz) {
 
 // ------------------------------------------------------------------ export
 export function exportTchart(p) {
-  const tz = p.time.tz || "Australia/Melbourne", unit = p.chainage.unit, k = unit === "km" ? 1000 : 1, pos = m => Math.round((m / k) * 1e6) / 1e6;
+  const tz = p.time.tz || "Australia/Melbourne", unit = p.chainage.unit, k = unitFactor(unit), pos = m => Math.round((m / k) * 1e6) / 1e6;
   const black = col("#000000"), white = col("#FFFFFF"), grey = col("#808080"), clear = col("#FFFFFF", 0), ink = col("#18262B"), axis = col("#A9A9A9");
   const lib = [], vals = [];
   p.styles.forEach((s, i) => {
@@ -137,7 +137,7 @@ function imgInfo(b64) {
 export function importTchart(text, unitHint = "auto", tz = "Australia/Melbourne") {
   const doc = JSON.parse(String(text).replace(/^﻿/, "").replace(/\bNaN\b/g, "null"));
   const suffix = String(doc.PositionSuffix || "").trim().toLowerCase();
-  const unit = unitHint === "m" || unitHint === "km" ? unitHint : suffix === "km" ? "km" : "m", k = unit === "km" ? 1000 : 1;
+  const unit = ["m", "km", "ft", "mi"].includes(unitHint) ? unitHint : ["km", "ft", "mi"].includes(suffix) ? suffix : "m", k = unitFactor(unit);
   const title = ((doc.Properties || []).find(x => x.Key === "ProjectTitle") || {}).Value || "TurboChart import";
   const c0 = (doc.Charts || [{}])[0] || {};
   const p = newProject(title, "other", (c0.StartPosition || 0) * k, (c0.EndPosition || 1000) * k, null, null, unit);

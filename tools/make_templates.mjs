@@ -181,9 +181,31 @@ const save = (name, p) => { p.rev = 0; writeFileSync(new URL(name, OUT), JSON.st
   save("tunnel-twin-tbm.tcs.json", p);
 }
 
+// ------------------------------------------------------------------ US versions (feet stationing, mileposts, US dates)
+import { readFileSync } from "node:fs";
+function usVersion(srcFile, outFile, title, ch) {
+  let text = readFileSync(new URL(srcFile, OUT), "utf8");
+  if (ch.unit === "mi") text = text.replace(/Re-sleepering/g, "Tie renewal").replace(/re-sleepering/g, "tie renewal").replace(/Sleeper exchange/g, "Tie inserter").replace(/sleepers/g, "ties");
+  const p = JSON.parse(text);
+  p.id = newId("prj_"); p.name = title; p.meta.title = title;
+  p.meta.subtitle = "Example project · made-up data · US units";
+  Object.assign(p.chainage, ch);
+  p.locale = { date_order: "mdy" }; p.time.week_start = 0; p.page.paper = "Ledger";
+  const lu = ch.unit === "ft" || ch.unit === "mi" ? "ft" : "m";
+  for (const a of p.activities) if (a.qty_unit === "m") { a.qty = Math.round(a.qty / 0.3048); a.qty_unit = lu; a.rate = Math.round((a.rate / 0.3048) * 10) / 10; a.rate_unit = lu + "/day"; }
+  for (const s of p.styles) if (s.footprint) s.footprint = { ...s.footprint };
+  save(outFile, p);
+}
+usVersion("road-highway.tcs.json", "us-road-highway.tcs.json", "Example US highway – widening",
+  { unit: "ft", format: "station", prefix: "STA", decimals: 2, major_m: 5000 * 0.3048, minor_m: 1000 * 0.3048, snap_m: 10 * 0.3048 });
+usVersion("rail-resleepering.tcs.json", "us-rail-tie-renewal.tcs.json", "Example US rail line – tie renewal",
+  { unit: "mi", format: "decimal", prefix: "MP", decimals: 2, major_m: 5 * 1609.344, minor_m: 1609.344, snap_m: 50 * 0.3048 });
+
 writeFileSync(new URL("index.json", OUT), JSON.stringify([
   { file: "rail-resleepering.tcs.json", name: "Rail – re-sleepering, two options", text: "60 km line, loops and level crossings, possession bands, re-sleepering footprint, Option A vs Option B." },
   { file: "road-highway.tcs.json", name: "Road – highway duplication", text: "12 km upgrade in three stages: earthworks blocks, pavement layers, bridges and traffic switches." },
   { file: "tunnel-twin-tbm.tcs.json", name: "Tunnel – twin-tube TBM", text: "6 km twin tubes with a mid shaft, fault zone, cross passages, TBM footprints and fit-out." },
+  { file: "us-road-highway.tcs.json", name: "US – highway widening (stations in feet)", text: "The highway example in US units: stationing 0+00 to 406+82, rates in ft/day, US dates, Ledger paper." },
+  { file: "us-rail-tie-renewal.tcs.json", name: "US – rail tie renewal (mileposts)", text: "The rail example in US units: mileposts MP 62 to MP 99, rates in ft/day, US dates, weeks from Sunday." },
 ], null, 1));
 console.log("wrote index.json");

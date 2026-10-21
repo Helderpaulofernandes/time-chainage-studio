@@ -1,6 +1,6 @@
 // Time-chainage drawing engine. Produces SVG markup for the screen and for the printed page.
 // Chainage runs across, time runs down (or up). Everything is placed through one geometry object.
-import { DAY, MON, tms, esc, chFmt, isoWeek, labelText, niceDate, niceFinish } from "./util.js";
+import { DAY, MON, tms, esc, chFmt, chUnitLabel, lenFmt, isoWeek, labelText, niceDate, niceFinish } from "./util.js";
 
 export const PAPER = { ink: "#18262B", muted: "#5D6B70", rule: "#C9D2D2", faint: "#EEF2F1", band: "#EDF2F1", band2: "#E2EAE8",
   sheet: "#FFFFFF", ghost: "#9AA5A8", hatch: "#9AA7AA", sel: "#E0A400" };
@@ -84,7 +84,7 @@ export function renderChart(p, opts = {}) {
     o += `<rect x="${a}" y="${G.headTop}" width="${w}" height="${G.SH - 2}" fill="${i % 2 ? PAPER.band2 : PAPER.band}" stroke="${PAPER.rule}" stroke-width=".6"/>`;
     const nm = s.name.length * (fs * 0.55) < w - 6 ? s.name : w > 30 ? `S${i + 1}` : "";
     if (nm) o += T(cx, G.headTop + 13, nm, `text-anchor="middle" font-size="${fs}" font-weight="600" font-family="${FONT}"`, `fill:${PAPER.ink}`);
-    if (w > 60) o += T(cx, G.headTop + 25, `${chFmt(p, Math.abs(s.to_m - s.from_m) * (c.unit === "km" ? 1 : 1)).replace(/\.?0+$/, "")} ${c.unit}`.replace(/^/, ""),
+    if (w > 60) o += T(cx, G.headTop + 25, lenFmt(p, Math.abs(s.to_m - s.from_m)),
       `text-anchor="middle" font-size="${fs - 2}" font-family="${MONO}"`, `fill:${PAPER.muted}`);
   });
 
@@ -271,7 +271,7 @@ function chainageAxis(p, G, y, topSide) {
     o += `<line x1="${x}" x2="${x}" y1="${y}" y2="${y + dir * (maj ? 7 : 3.5)}" stroke="${PAPER.muted}"/>`;
     if (maj) o += T(x, topSide ? y - 10 : y + 19, chFmt(p, m).replace(/\.0+$/, ""), `text-anchor="middle" font-size="${fs}" font-family="${MONO}"`, `fill:${PAPER.muted}`);
   }
-  o += T(G.L - 10, topSide ? y - 10 : y + 19, (c.prefix ? c.prefix + " " : "") + c.unit, `text-anchor="end" font-size="${fs - 1}" font-family="${MONO}"`, `fill:${PAPER.muted}`);
+  o += T(G.L - 10, topSide ? y - 10 : y + 19, (c.prefix ? c.prefix + " " : "") + chUnitLabel(p), `text-anchor="end" font-size="${fs - 1}" font-family="${MONO}"`, `fill:${PAPER.muted}`);
   return o;
 }
 

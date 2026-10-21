@@ -1,5 +1,5 @@
 // Primavera P6 XER in the browser: read, describe for field mapping, map onto a project, sync, and write.
-import { makeActivity, makeStyle, parseT, fmtT, DAY } from "./model.js";
+import { makeActivity, makeStyle, parseT, fmtT, DAY, unitFactor } from "./model.js";
 
 export const PALETTE = ["#002060", "#00B0F0", "#FFC000", "#92D050", "#C00000", "#C65911", "#7030A0", "#548235", "#FF66CC",
   "#996633", "#404040", "#1F8A86", "#8B0000", "#7F7F7F", "#E2C46B", "#4F81BD"];
@@ -58,7 +58,7 @@ export function suggestMapping(d) {
   let style = find("style"); if (style.source === "none") style = find("shape");
   const lab = (start.label || "").toLowerCase();
   return { projects: d.projects.map(p => p.id), start: "act_or_early_start", finish: "act_or_early_finish", ch_start: start, ch_end: end,
-    ch_unit: lab.includes("(m)") ? "m" : lab.includes("km") ? "km" : "m", style: style.source !== "none" ? style : { source: "wbs" },
+    ch_unit: lab.includes("(ft)") || lab.includes(" ft") ? "ft" : lab.includes("(mi)") || lab.includes("mile") ? "mi" : lab.includes("(m)") ? "m" : lab.includes("km") ? "km" : "m", style: style.source !== "none" ? style : { source: "wbs" },
     filter: { source: "none", values: [] }, skip_without_chainage: true, include_milestones: true, include_summary: false, dataset_name: "" };
 }
 
@@ -84,13 +84,15 @@ class Lookup {
   }
 }
 
-// Accepts 232.135, CH232.135, 232135 or road-style 232+135 (always km+m).
+// Accepts 232.135, CH232.135, 232135, MP 12.40, or stations: 12+34.56 (100 ft stations) when the unit is ft or mi,
+// otherwise 12+345 (km + m).
 export function chainageToM(raw, unit) {
   if (raw == null || String(raw).trim() === "") return null;
   const s = String(raw).replace(/,/g, "");
-  const kp = s.match(/(-?\d+)\+(\d+(?:\.\d+)?)/); if (kp) return +kp[1] * 1000 + +kp[2];
+  const kp = s.match(/(-?)(\d+)\+(\d+(?:\.\d+)?)/);
+  if (kp) { const sign = kp[1] ? -1 : 1; return unit === "ft" || unit === "mi" ? sign * (+kp[2] * 100 + +kp[3]) * 0.3048 : sign * (+kp[2] * 1000 + +kp[3]); }
   const n = s.match(/-?\d+(?:\.\d+)?/); if (!n) return null;
-  return +n[0] * (unit === "km" ? 1000 : 1);
+  return +n[0] * unitFactor(unit);
 }
 function dateOf(t, f) {
   const v = f === "act_or_early_start" ? t.act_start_date || t.early_start_date || t.restart_date || t.target_start_date
@@ -162,7 +164,7 @@ const XF = {
 // One dataset as a P6 project: 7-day 24 h calendar, WBS from activity groups, three UDFs (start/end chainage, activity style).
 export function write(p, datasetId) {
   const ds = datasetId || p.view.main_dataset, dsName = (p.datasets.find(d => d.id === ds) || {}).name || "Main";
-  const m = (p.p6 || {}).mapping || {}, unit = m.ch_unit || "m", scale = unit === "km" ? 1000 : 1;
+  const m = (p.p6 || {}).mapping || {}, unit = m.ch_unit || (p.chainage.unit === "ft" || p.chainage.unit === "mi" ? "ft" : "m"), scale = unitFactor(unit);
   const labS = (m.ch_start || {}).label || `Start Chainage (${unit})`, labE = (m.ch_end || {}).label || `End Chainage (${unit})`, labSt = (m.style || {}).label || "Activity Style";
   const d = new Date(), pad = n => String(n).padStart(2, "0");
   const now = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
