@@ -131,16 +131,26 @@ export function layoutText(b, p, w, hh) {
 // ------------------------------------------------------------------ page layout view controller
 export function pageView(app) {
   const root = $("#page-view");
-  let sel = null, drag = null;
-  function draw() {
-    const pg = app.p.page, [W, H] = paperSize(pg);
-    const area = $("#page-canvas");
-    area.innerHTML = renderPage(app.p, { selected: sel });
-    const svg = area.querySelector("svg");
-    const fit = Math.min((area.clientWidth - 40) / W, (area.clientHeight - 40) / H);
+  let sel = null, drag = null, zoom = 1; // zoom 1 = whole sheet fits the window
+  // size the sheet on screen; keep the point under the cursor (or the centre) still when zooming
+  function size(anchor) {
+    const [W, H] = paperSize(app.p.page), area = $("#page-canvas"), svg = area.querySelector("svg"); if (!svg) return;
+    const r0 = svg.getBoundingClientRect(), a = area.getBoundingClientRect();
+    const cx = anchor ? anchor.clientX : a.left + a.width / 2, cy = anchor ? anchor.clientY : a.top + a.height / 2;
+    const fx = r0.width ? (cx - r0.left) / r0.width : .5, fy = r0.height ? (cy - r0.top) / r0.height : .5;
+    const fit = Math.max(0.05, Math.min((area.clientWidth - 40) / W, (area.clientHeight - 40) / H)) * zoom;
     svg.setAttribute("width", (W * fit).toFixed(0)); svg.setAttribute("height", (H * fit).toFixed(0));
+    if (anchor !== undefined) { const r1 = svg.getBoundingClientRect(); area.scrollLeft += r1.left + fx * r1.width - cx; area.scrollTop += r1.top + fy * r1.height - cy; }
+    const st = $("#st-cursor"); if (st && app.view === "page") st.textContent = `Page zoom ${Math.round(zoom * 100)}%`;
+  }
+  function draw() {
+    const area = $("#page-canvas"), sl = area.scrollLeft, stp = area.scrollTop;
+    area.innerHTML = renderPage(app.p, { selected: sel });
+    size(); area.scrollLeft = sl; area.scrollTop = stp;
     side();
   }
+  function zoomBy(f, e) { const z = clamp(zoom * f, 0.25, 10); if (z === zoom) return; zoom = z; size(e || null); }
+  function fit() { zoom = 1; size(); }
   function side() {
     const pg = app.p.page, panel = $("#page-side"); panel.innerHTML = "";
     const set = (k, v) => { app.commit(); pg[k] = v; app.changed(false); draw(); };
@@ -196,12 +206,11 @@ export function pageView(app) {
     const q = pt(e), dx = (q.x - drag.p0.x) / AW, dy = (q.y - drag.p0.y) / AH, b = drag.b, o = drag.orig, snap = v => Math.round(v * 200) / 200;
     if (drag.mode === "move") { b.x = snap(clamp(o.x + dx, 0, 1 - b.w)); b.y = snap(clamp(o.y + dy, 0, 1 - b.h)); }
     else { b.w = snap(clamp(o.w + dx, .03, 1 - b.x)); b.h = snap(clamp(o.h + dy, .03, 1 - b.y)); }
-    $("#page-canvas").innerHTML = renderPage(app.p, { selected: sel });
-    const svg = $("#page-canvas svg"), area = $("#page-canvas"), fit = Math.min((area.clientWidth - 40) / W, (area.clientHeight - 40) / H);
-    svg.setAttribute("width", (W * fit).toFixed(0)); svg.setAttribute("height", (H * fit).toFixed(0));
+    const area = $("#page-canvas"), sl = area.scrollLeft, stp = area.scrollTop;
+    area.innerHTML = renderPage(app.p, { selected: sel }); size(); area.scrollLeft = sl; area.scrollTop = stp;
   });
   root.addEventListener("pointerup", () => { if (drag) { app.pushUndo(drag.snap); drag = null; app.changed(false); draw(); } });
-  return { draw };
+  return { draw, zoomBy, fit };
 }
 
 const lbl = (t, input) => h("label", { class: "fld" }, h("span", {}, t), input);

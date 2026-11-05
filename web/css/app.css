@@ -71,7 +71,8 @@ h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; margin-t
 #chart.draw { cursor: crosshair; }
 #chart .act { cursor: move; } #chart [data-h] { cursor: grab; } #chart .mk, #chart .loc { cursor: pointer; }
 #page-view:not([hidden]) { display: grid; grid-template-columns: minmax(0, 1fr) 270px; }
-#page-canvas { overflow: auto; display: grid; place-items: center; background: var(--faint); padding: 20px; }
+#page-canvas { overflow: auto; display: flex; background: var(--faint); padding: 20px; }
+#page-canvas svg { margin: auto; flex: none; }
 #page-canvas svg { box-shadow: 0 4px 22px rgba(0,0,0,.22); background: #fff; }
 #page-side { border-left: 1px solid var(--rule); background: var(--sheet); padding: 10px 12px; overflow: auto; display: grid; gap: 8px; align-content: start; }
 .panel { border-left: 1px solid var(--rule); background: var(--sheet); display: grid; grid-template-rows: auto 1fr; min-height: 0; }

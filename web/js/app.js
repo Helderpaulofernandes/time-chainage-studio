@@ -65,7 +65,7 @@ const MENU = {
   Edit: [["Undo", "Ctrl+Z", undo], ["Redo", "Ctrl+Y", redo], "-", ["Duplicate selection", "Ctrl+D", () => dupSel()], ["Delete selection", "Del", () => delSel()]],
   View: [["Play the programme", "", () => need() && playOpen()], "-", ["Chart", "", () => setView("chart")], ["Page layout", "", () => need() && setView("page")], "-",
     ["Zoom time in", "Ctrl+=", () => zoomT(1.25)], ["Zoom time out", "Ctrl+-", () => zoomT(0.8)], ["Fit time to window", "", () => fitTime()],
-    ["Zoom chainage in", "", () => { app.xZoom = Math.min(20, app.xZoom * 1.5); render(); }], ["Zoom chainage out", "", () => { app.xZoom = Math.max(1, app.xZoom / 1.5); render(); }], ["Fit chainage", "", () => { app.xZoom = 1; render(); }], "-",
+    ["Zoom chainage in", "Ctrl+Shift+wheel", () => zoomX(1.5)], ["Zoom chainage out", "", () => zoomX(1 / 1.5)], ["Fit chainage", "", () => { app.xZoom = 1; render(); }], "-",
     ["Labels", "", () => toggle("show_labels"), () => app.p?.view.show_labels !== false], ["Footprints", "", () => toggle("show_footprints"), () => app.p?.view.show_footprints !== false],
     ["Time markers", "", () => toggle("show_time_markers"), () => app.p?.view.show_time_markers !== false], ["Location grid", "", () => toggle("show_location_grid"), () => app.p?.view.show_location_grid !== false]],
   Insert: [["Activity", "", () => need() && insertAct()], ["Location marker", "", () => need() && insertLoc()], ["Time marker", "", () => need() && insertMk()], ["Section…", "", () => need() && D.projectSetup(app, "edit")], ["Activity style", "", () => need() && insertStyle()], ["Header image…", "", () => need() && D.headerImage(app)]],
@@ -130,7 +130,7 @@ document.addEventListener("click", e => { if (!e.target.closest(".menu")) closeM
 function shortcuts() {
   D.modal({ title: "Keyboard shortcuts", body: el => el.append(h("table", { class: "grid-tbl" }, h("tbody", {}, [
     ["V", "Select and drag"], ["D", "Draw activity"], ["Del", "Delete selection"], ["Ctrl+Z / Ctrl+Y", "Undo / redo"], ["Ctrl+D", "Duplicate selection"],
-    ["Ctrl + mouse wheel", "Zoom time"], ["Shift + mouse wheel", "Scroll across chainage"], ["Esc", "Clear selection"], ["Ctrl+L", "Page layout"], ["Ctrl+P", "Print"]]
+    ["Ctrl + mouse wheel", "Zoom time at the mouse (on the page layout: zoom the sheet)"], ["Ctrl+Shift + mouse wheel", "Zoom chainage at the mouse"], ["Ctrl+ = / Ctrl+ −", "Zoom in / out"], ["Shift + mouse wheel", "Scroll across chainage"], ["Esc", "Clear selection"], ["Ctrl+L", "Page layout"], ["Ctrl+P", "Print"]]
     .map(([k, v]) => h("tr", {}, h("td", {}, h("kbd", {}, k)), h("td", {}, v)))))), buttons: [{ label: "Close" }] });
 }
 
@@ -138,7 +138,7 @@ function shortcuts() {
 function setView(v) {
   app.view = v; $("#chart-view").hidden = v !== "chart"; $("#page-view").hidden = v !== "page";
   $$("#viewtabs button").forEach(b => b.setAttribute("aria-pressed", b.dataset.view === v));
-  if (v === "page") pv.draw(); else render();
+  if (v === "page") pv.draw(); else { $("#st-cursor").textContent = ""; render(); }
 }
 const pv = pageView(app);
 
@@ -181,9 +181,31 @@ function status() {
   else if (p && api.filesSupported) fe.append(h("button", { type: "button", class: "small", onclick: linkFile }, "Save to a file on my PC…"));
 }
 
-function zoomT(f) { if (!need()) return; app.p.time.px_per_day = +clamp(app.p.time.px_per_day * f, 0.05, 40).toFixed(3); app.changed(); }
+// Zoom keeps the date (or chainage) under the mouse where it is; without a mouse position it keeps the middle of the window.
+function anchorOf(e) {
+  const box = $("#chart-scroll"), b = box.getBoundingClientRect(), r = $("#chart").getBoundingClientRect();
+  const cx = e ? e.clientX : b.left + b.width / 2, cy = e ? e.clientY : b.top + b.height / 2;
+  return { box, cx, cy, t: G ? G.Yi(cy - r.top) : null, m: G ? G.Xi(cx - r.left) : null };
+}
+function zoomT(f, e) {
+  if (!need()) return;
+  if (app.view === "page") return pv.zoomBy(f, e);
+  const v = +clamp(app.p.time.px_per_day * f, 0.05, 40).toFixed(3); if (v === app.p.time.px_per_day) return;
+  const a = app.view === "chart" ? anchorOf(e) : null;
+  app.p.time.px_per_day = v; app.changed();
+  if (a && a.t != null && G) a.box.scrollTop += $("#chart").getBoundingClientRect().top + G.Y(a.t) - a.cy;
+}
+function zoomX(f, e) {
+  if (!need()) return;
+  if (app.view === "page") return pv.zoomBy(f, e);
+  const z = clamp(app.xZoom * f, 1, 20); if (z === app.xZoom) return;
+  const a = anchorOf(e); app.xZoom = z; render();
+  if (a.m != null && G) a.box.scrollLeft += $("#chart").getBoundingClientRect().left + G.X(a.m) - a.cx;
+}
 function fitTime() {
-  if (!need()) return; const box = $("#chart-scroll");
+  if (!need()) return;
+  if (app.view === "page") return pv.fit();
+  const box = $("#chart-scroll");
   const g = geometry(app.p, { width: box.clientWidth, height: box.clientHeight - 4 });
   app.p.time.px_per_day = +g.ppd.toFixed(3); app.changed();
 }
@@ -246,7 +268,16 @@ svgEl.addEventListener("pointerup", () => {
   if (d.moved) { app.pushUndo(d.snap); app.changed(); }
 });
 svgEl.addEventListener("pointerleave", () => { $("#xv")?.setAttribute("display", "none"); $("#xh")?.setAttribute("display", "none"); });
-$("#chart-scroll").addEventListener("wheel", e => { if (e.ctrlKey && app.p) { e.preventDefault(); zoomT(e.deltaY < 0 ? 1.15 : 0.87); } }, { passive: false });
+// Ctrl + wheel (and trackpad pinch) zooms the chart or the page, never the browser.
+// Over the chart or page the point under the mouse stays put; Ctrl+Shift+wheel zooms chainage.
+window.addEventListener("wheel", e => {
+  if (!e.ctrlKey) return;
+  e.preventDefault();
+  if (!app.p || $("dialog[open]")) return;
+  const d = e.deltaY || e.deltaX, f = Math.exp(-clamp(d, -120, 120) * 0.0013);
+  const over = e.target.closest?.("#chart-scroll, #page-canvas") ? e : undefined;
+  if (e.shiftKey && app.view === "chart") zoomX(f, over); else zoomT(f, over);
+}, { passive: false });
 
 function readout(q) {
   const xv = $("#xv"), xh = $("#xh"); if (!xv) return;
@@ -267,12 +298,13 @@ document.addEventListener("keydown", e => {
   if (mod && k === "o") { e.preventDefault(); D.openProject(app); return; }
   if (mod && k === "p" && app.p) { e.preventDefault(); printPage(app.p); return; }
   if (mod && k === "l" && app.p) { e.preventDefault(); setView(app.view === "page" ? "chart" : "page"); return; }
+  if (mod && (k === "=" || k === "+" || k === "-")) { // never zoom the browser
+    e.preventDefault(); if (!$("dialog[open]")) zoomT(k === "-" ? 0.8 : 1.25); return;
+  }
   if (typing || $("dialog[open]")) return;
   if (mod && k === "z") { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
   if (mod && k === "y") { e.preventDefault(); redo(); return; }
   if (mod && k === "d") { e.preventDefault(); dupSel(); return; }
-  if (mod && (k === "=" || k === "+")) { e.preventDefault(); zoomT(1.25); return; }
-  if (mod && k === "-") { e.preventDefault(); zoomT(0.8); return; }
   if (mod) return;
   if ((k === "delete" || k === "backspace") && app.sel) { e.preventDefault(); delSel(); }
   if (play.on && k === " ") { e.preventDefault(); playToggle(); return; }
