@@ -72,9 +72,15 @@ export function newProject(name = "Untitled", discipline = "rail", chStart = 0, 
     location_types: JSON.parse(JSON.stringify(preset.location_types)), location_rows: 4,
     styles: preset.styles.map(([c, n, k, col]) => makeStyle(c, n, k, col)),
     datasets: [{ id: ds, name: "Main", source: "manual" }],
-    view: { main_dataset: ds, compare_dataset: null, show_footprints: true, show_labels: true, show_time_markers: true, show_location_grid: true },
+    view: { main_dataset: ds, compare_dataset: null, show_footprints: true, show_labels: true, show_time_markers: true, show_location_grid: true,
+      pause_on_shutdowns: false, corridor: corridorDefaults() },
     sections: [], locations: [], time_markers: [], activities: [], productivities: [], page: { ...defaultPage(), paper: unit === "ft" || unit === "mi" ? "Ledger" : "A3" }, p6: null, header_image: null,
   };
+}
+
+// Corridor view (crew playback) settings, kept with the project's other view settings.
+export function corridorDefaults() {
+  return { show: "both", lanes: null, stages: [], lookahead_days: 21, lane_height: 30, show_tags: true };
 }
 
 export function makeActivity(dataset, code, name, start, finish, ch0_m, ch1_m, style, extra = {}) {
@@ -88,6 +94,9 @@ export function normalise(p) {
   for (const [k, v] of Object.entries(base)) if (!(k in p)) p[k] = v;
   if (!p.locale) p.locale = { date_order: "dmy" };
   for (const k of ["meta", "chainage", "time", "view"]) for (const [kk, vv] of Object.entries(base[k])) if (!(kk in p[k])) p[k][kk] = vv;
+  if (!p.view.corridor || typeof p.view.corridor !== "object") p.view.corridor = corridorDefaults();
+  for (const [kk, vv] of Object.entries(corridorDefaults())) if (!(kk in p.view.corridor)) p.view.corridor[kk] = vv;
+  if (!Array.isArray(p.view.corridor.stages)) p.view.corridor.stages = [];
   p.styles.forEach(s => {
     const ref = makeStyle(s.code || "X", s.name || "", s.kind || "line", s.colour || "#1F6E8C");
     for (const [kk, vv] of Object.entries(ref)) if (!(kk in s)) s[kk] = vv;

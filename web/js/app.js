@@ -1,6 +1,7 @@
 // Time-Chainage Studio front end: menus, chart interaction, side panels, undo and autosave.
 import { api } from "./api.js";
-import { renderChart, renderLegend, geometry, styleMap, activeAt, playDynamic } from "./render.js";
+import { renderChart, renderLegend, geometry, styleMap, activeAt, playDynamic, resetProgress } from "./render.js";
+import { renderCorridor, corridorDynamic, corridorCfg } from "./corridor.js";
 import { DAY, tms, tstr, dstr, niceDate, niceFinish, chFmt, chToM, mToCh, chLabel, chIsStation, lenUnit, lenFromM, setDateOrder, esc, $, $$, h, uid, clamp, download, debounce, DOW } from "./util.js";
 // chainage inputs: text boxes on station projects ("12+34.56"), number boxes otherwise
 const chAttrs = (p, extra = {}) => (chIsStation(p) ? { type: "text", inputmode: "decimal", placeholder: p.chainage.unit === "ft" ? "12+34.56" : "12+345", ...extra } : { type: "number", step: "any", ...extra });
@@ -12,7 +13,7 @@ const app = {
   p: null, sel: null, mode: "select", view: "chart", xZoom: 1, undoS: [], redoS: [], presets: null, saveState: "",
   commit() { this.pushUndo(JSON.stringify(this.p)); },
   pushUndo(s) { this.undoS.push(s); if (this.undoS.length > 80) this.undoS.shift(); this.redoS = []; },
-  changed(rerender = true) { this.saveState = "Unsaved changes"; status(); save(); if (rerender) render(); },
+  changed(rerender = true) { resetProgress(this.p); this.saveState = "Unsaved changes"; status(); save(); if (rerender) render(); },
   open(p, fresh = false) { if (play.on) playClose(true); setDateOrder((p.locale || {}).date_order); this.p = p; this.rev = p.rev || 0; this.stale = false; this.file = null; refreshFile(fresh); this.sel = null; this.undoS = []; this.redoS = []; try { localStorage.setItem("tcs-last", p.id); } catch (e) { /* storage blocked */ } this.saveState = "Saved"; render(); },
   load(p) { this.commit(); setDateOrder((p.locale || {}).date_order); this.p = p; this.rev = p.rev || 0; this.sel = null; render(); },
   rev: 0, stale: false, // server revision of the copy this window last read or saved; undo never changes it
@@ -63,7 +64,7 @@ const MENU = {
     ["Export chart as SVG", "", () => need() && exportChartSvg()], ["Export playback video…", "", () => need() && openVideo()], "-",
     ["Page layout…", "Ctrl+L", () => need() && setView("page")], ["Print…", "Ctrl+P", () => need() && printPage(app.p)], ["Export page as PNG", "", () => need() && exportPng(app.p)]],
   Edit: [["Undo", "Ctrl+Z", undo], ["Redo", "Ctrl+Y", redo], "-", ["Duplicate selection", "Ctrl+D", () => dupSel()], ["Delete selection", "Del", () => delSel()]],
-  View: [["Play the programme", "", () => need() && playOpen()], "-", ["Chart", "", () => setView("chart")], ["Page layout", "", () => need() && setView("page")], "-",
+  View: [["Play the programme", "", () => need() && playOpen()], ["Corridor view settings…", "", () => need() && D.corridorSettings(app)], "-", ["Chart", "", () => setView("chart")], ["Page layout", "", () => need() && setView("page")], "-",
     ["Zoom time in", "Ctrl+=", () => zoomT(1.25)], ["Zoom time out", "Ctrl+-", () => zoomT(0.8)], ["Fit time to window", "", () => fitTime()],
     ["Zoom chainage in", "Ctrl+Shift+wheel", () => zoomX(1.5)], ["Zoom chainage out", "", () => zoomX(1 / 1.5)], ["Fit chainage", "", () => { app.xZoom = 1; render(); }], "-",
     ["Labels", "", () => toggle("show_labels"), () => app.p?.view.show_labels !== false], ["Footprints", "", () => toggle("show_footprints"), () => app.p?.view.show_footprints !== false],
@@ -159,10 +160,19 @@ function render() {
   panel(); status();
 }
 
-let G = null;
+let G = null, COR = null;
+// What playback shows: the chart, the corridor view, or both (the corridor above the chart)
+const corMode = () => (play.on && app.p ? corridorCfg(app.p).show || "both" : "chart");
 function drawChart() {
-  const box = $("#chart-scroll"), svg = $("#chart");
-  const width = Math.max(700, (box.clientWidth - 2) * app.xZoom);
+  const box = $("#chart-scroll"), svg = $("#chart"), wrap = $("#corridor-wrap"), mode = corMode();
+  wrap.hidden = mode === "chart"; box.hidden = mode === "corridor"; $("#chart-view").classList.toggle("cor-only", mode === "corridor");
+  $$("#pb-mode button").forEach(b => b.setAttribute("aria-pressed", b.dataset.show === mode));
+  const width = Math.max(700, ((mode === "corridor" ? wrap.clientWidth : box.clientWidth) - 2) * app.xZoom);
+  if (mode !== "chart") {
+    const r = renderCorridor(app.p, { width, playTime: play.t }), cs = $("#corridor");
+    COR = r.C; cs.setAttribute("viewBox", `0 0 ${r.width} ${r.height}`); cs.setAttribute("width", r.width); cs.setAttribute("height", r.height); cs.innerHTML = r.svg;
+    wrap.scrollLeft = box.scrollLeft;
+  } else COR = null;
   const r = renderChart(app.p, { width, selection: play.on ? null : app.sel, interactive: true, playTime: play.on ? play.t : null });
   G = r.G;
   svg.setAttribute("viewBox", `0 0 ${G.W} ${G.H}`); svg.setAttribute("width", G.W); svg.setAttribute("height", G.H);
@@ -587,7 +597,7 @@ const play = { on: false, running: false, t: 0, t0: 0, t1: 0, last: 0, drawn: 0,
 const fileBase = () => (app.p.name || "time_chainage").replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "");
 function openVideo() {
   playStop(); playRange();
-  D.videoDialog(app, { t0: play.t0, t1: play.t1 - DAY, onDone: r => download(`${fileBase()}_playback.${r.ext}`, r.blob, r.blob.type) });
+  D.videoDialog(app, { t0: play.t0, t1: play.t1 - DAY, mode: corridorCfg(app.p).show || "both", onDone: r => download(`${fileBase()}_playback.${r.ext}`, r.blob, r.blob.type) });
 }
 function playRange() {
   const p = app.p, acts = p.activities.filter(a => a.dataset === p.view.main_dataset);
@@ -601,7 +611,7 @@ function playOpen() {
   drawChart(); playUi(); playFollow(true); playStart();
 }
 function playClose(quiet) {
-  playStop(); play.on = false; $("#playbar").hidden = true; $("#b-play").setAttribute("aria-pressed", "false"); svgEl.classList.remove("playing");
+  playStop(); play.on = false; COR = null; $("#corridor-wrap").hidden = true; $("#chart-scroll").hidden = false; $("#chart-view").classList.remove("cor-only"); $("#playbar").hidden = true; $("#b-play").setAttribute("aria-pressed", "false"); svgEl.classList.remove("playing");
   if (!quiet && app.p) drawChart();
 }
 function playStart() {
@@ -627,6 +637,10 @@ function playFrameDraw() {
   const d = playDynamic(app.p, G, play.t);
   clip.setAttribute("y", d.clipY); clip.setAttribute("height", d.clipH);
   grid.innerHTML = d.grid; topG.innerHTML = d.top; G.playY = d.y;
+  if (COR) {
+    const c = corridorDynamic(app.p, COR, play.t), hd = $("#cor-head"), tr = $("#cor-track"), dy = $("#cor-dyn");
+    if (hd && tr && dy) { hd.innerHTML = c.head; tr.innerHTML = c.track; dy.innerHTML = c.acts; }
+  }
 }
 function playUi() {
   const span = play.t1 - play.t0 || 1;
@@ -647,7 +661,10 @@ function wire() {
   $("#pb-play").onclick = playToggle;
   $("#pb-start").onclick = () => playSeek(play.t0);
   $("#pb-close").onclick = () => playClose();
-  $("#pb-frame").onclick = async () => { const { exportFrame } = await import("./video.js"); download(`${fileBase()}_${new Date(play.t).toISOString().slice(0, 10)}.png`, await exportFrame(app.p, play.t), "image/png"); };
+  $("#pb-frame").onclick = async () => { const { exportFrame } = await import("./video.js"); download(`${fileBase()}_${new Date(play.t).toISOString().slice(0, 10)}.png`, await exportFrame(app.p, play.t, 1920, 1080, { mode: corMode() }), "image/png"); };
+  $$("#pb-mode button").forEach(b => (b.onclick = () => { if (!app.p || corridorCfg(app.p).show === b.dataset.show) return; app.commit(); app.p.view.corridor.show = b.dataset.show; app.changed(); }));
+  $("#pb-cor").onclick = () => need() && D.corridorSettings(app);
+  $("#chart-scroll").addEventListener("scroll", e => { const w = $("#corridor-wrap"); if (!w.hidden) w.scrollLeft = e.target.scrollLeft; });
   $("#pb-video").onclick = () => openVideo();
   $("#pb-slider").oninput = e => { playStop(); playSeek(play.t0 + (+e.target.value / 1000) * (play.t1 - play.t0)); };
   buildMenus();

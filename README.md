@@ -45,6 +45,7 @@ Then open http://localhost:8765. The Python server in `server/` also offers the 
 | Page layout (paper, margins, title, title block, chart, legend, notes), print, SVG/PNG export | done |
 | Playback: View → Play the programme runs a date line down the chart; work fronts and crew positions move, done work fills in, future work stays faint | done |
 | Playback export: an MP4 video (720p, 1080p or 4K, any length) or a PNG of any moment, made in the browser | done |
+| Corridor view: during playback, crews move along lanes by chainage above the chart, the track line fills in by stage, crews pause on stand-downs (optional), and video export can include it | done |
 | Live P6 connection (EPPM web services, Primavera Cloud REST, P6 Pro database) | next phase |
 
 ## Units (metric and US)

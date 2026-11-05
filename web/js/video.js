@@ -1,6 +1,7 @@
 // Playback export: draws each frame offline (title strip, chart at the play date, legend) and encodes it as MP4.
 // MP4 uses the browser's WebCodecs encoder and mp4-muxer (loaded only when needed); WebM via MediaRecorder is the fallback.
-import { renderChart, renderLegend, playDynamic, activeAt } from "./render.js";
+import { renderChart, renderLegend, activeAt } from "./render.js";
+import { renderCorridor } from "./corridor.js";
 import { niceDate, esc, DAY, DOW } from "./util.js";
 
 const FONT = "IBM Plex Sans Condensed, Arial Narrow, Arial, sans-serif";
@@ -14,12 +15,36 @@ function loadScript(src) {
   });
 }
 
-// One frame as an SVG string of size W x H.
-export function frameSvg(p, t, W, H) {
-  const head = Math.round(H * 0.085), legendW = Math.round(W * 0.17), pad = 12;
+// The corridor view sized for a frame: in "both" it takes at most 65% of the height (lanes shrink rather than the chart),
+// on its own its lanes grow to fill the frame.
+function corridorFor(p, t, w, h, mode, phase, compact) {
+  const base = { width: w, compact, playTime: t, hideDate: true, phase };
+  let r = renderCorridor(p, base);
+  const fixed = r.C.lanesTop + 8, n = Math.max(1, r.C.lanes.length);
+  const room = mode === "both" ? h * 0.65 : h;
+  const lh = mode === "both" ? (r.height > room ? Math.max(10, (room - fixed) / n) : null) : Math.min(60, Math.max(10, (room - fixed) / n));
+  if (lh) r = renderCorridor(p, { ...base, laneHeight: lh });
+  return r;
+}
+
+// One frame as an SVG string of size W x H. mode: "chart" | "corridor" | "both".
+export function frameSvg(p, t, W, H, { mode = "chart", phase = 0 } = {}) {
+  const head = Math.round(H * 0.085), legendW = Math.round(W * 0.17), pad = 12, compact = W < 1500;
   const ds = (p.datasets.find(d => d.id === p.view.main_dataset) || {}).name || "";
   const n = activeAt(p, t).length, d = new Date(t);
-  const { svg: chart, G } = renderChart(p, { width: W - legendW - pad * 3, height: H - head - pad * 2, compact: W < 1500, playTime: t });
+  const aw = W - legendW - pad * 3, ah = H - head - pad * 2;
+  let cor = "", corH = 0;
+  if (mode === "corridor" || mode === "both") {
+    const r = corridorFor(p, t, aw, ah, mode, phase, compact);
+    corH = Math.min(ah, r.height);
+    cor = `<svg x="${pad}" y="${head + pad}" width="${aw}" height="${corH}" viewBox="0 0 ${r.width} ${r.height}" preserveAspectRatio="xMinYMin meet">${r.svg}</svg>`;
+  }
+  const gap = cor ? 8 : 0, chH = ah - corH - gap;
+  let chartSvg = "";
+  if (mode !== "corridor" && chH > 40) {
+    const { svg: chart, G } = renderChart(p, { width: aw, height: chH, compact, playTime: t });
+    chartSvg = `<svg x="${pad}" y="${head + pad + corH + gap}" width="${aw}" height="${chH}" viewBox="0 0 ${G.W} ${G.H}" preserveAspectRatio="xMidYMin meet">${chart}</svg>`;
+  }
   const lg = renderLegend(p, { size: 11 });
   const lgScale = Math.min(1, (H - head - pad * 2) / Math.max(1, lg.height));
   const ts = Math.round(head * 0.36), ss = Math.round(head * 0.2);
@@ -30,7 +55,7 @@ export function frameSvg(p, t, W, H) {
     <text x="${pad * 2}" y="${head * 0.82}" font-size="${ss}" fill="#C9D2D2">${esc(ds)}</text>
     <text x="${W - pad * 2}" y="${head * 0.5}" font-size="${ts}" font-weight="700" fill="#fff" text-anchor="end">${esc(DOW[d.getUTCDay()] + " " + niceDate(t))}</text>
     <text x="${W - pad * 2}" y="${head * 0.82}" font-size="${ss}" fill="#C9D2D2" text-anchor="end">${n ? `${n} activit${n === 1 ? "y" : "ies"} under way` : "nothing under way"}</text>
-    <svg x="${pad}" y="${head + pad}" width="${W - legendW - pad * 3}" height="${H - head - pad * 2}" viewBox="0 0 ${G.W} ${G.H}" preserveAspectRatio="xMidYMid meet">${chart}</svg>
+    ${cor}${chartSvg}
     <g transform="translate(${W - legendW - pad} ${head + pad}) scale(${lgScale})">${lg.svg}</g>
   </svg>`;
 }
@@ -45,14 +70,15 @@ async function drawSvg(ctx, svg, W, H) {
 }
 
 // Still image of the chart at time t.
-export async function exportFrame(p, t, W = 1920, H = 1080) {
+export async function exportFrame(p, t, W = 1920, H = 1080, opts = {}) {
   const cv = Object.assign(document.createElement("canvas"), { width: W, height: H });
-  await drawSvg(cv.getContext("2d"), frameSvg(p, t, W, H), W, H);
+  await drawSvg(cv.getContext("2d"), frameSvg(p, t, W, H, { phase: 0.3, ...opts }), W, H);
   return new Promise(res => cv.toBlob(res, "image/png"));
 }
 
 // Encode the playback from t0 to t1 into a video of `seconds` length. onProgress(0..1); return false from it to cancel.
-export async function exportVideo(p, { t0, t1, seconds = 20, fps = 30, W = 1920, H = 1080, hold = 2, onProgress = () => true }) {
+export async function exportVideo(p, { t0, t1, seconds = 20, fps = 30, W = 1920, H = 1080, hold = 2, mode = "chart", onProgress = () => true }) {
+  const svgAt = i => frameSvg(p, tAt(i), W, H, { mode, phase: (i / fps) % 1 });
   const frames = Math.max(2, Math.round(seconds * fps)), extra = Math.round(hold * fps);
   const cv = Object.assign(document.createElement("canvas"), { width: W, height: H });
   const ctx = cv.getContext("2d");
@@ -69,7 +95,7 @@ export async function exportVideo(p, { t0, t1, seconds = 20, fps = 30, W = 1920,
     enc.configure(cfg);
     for (let i = 0; i < frames + extra; i++) {
       if (fail) throw fail;
-      await drawSvg(ctx, frameSvg(p, tAt(i), W, H), W, H);
+      await drawSvg(ctx, svgAt(i), W, H);
       const vf = new VideoFrame(cv, { timestamp: Math.round((i * 1e6) / fps), duration: Math.round(1e6 / fps) });
       enc.encode(vf, { keyFrame: i % (fps * 2) === 0 }); vf.close();
       while (enc.encodeQueueSize > 8) await new Promise(r => setTimeout(r, 5));
@@ -87,7 +113,7 @@ export async function exportVideo(p, { t0, t1, seconds = 20, fps = 30, W = 1920,
   rec.start();
   const start = performance.now();
   for (let i = 0; i < frames + extra; i++) {
-    await drawSvg(ctx, frameSvg(p, tAt(i), W, H), W, H);
+    await drawSvg(ctx, svgAt(i), W, H);
     track.requestFrame();
     const wait = start + (i + 1) * (1000 / fps) - performance.now();
     if (wait > 0) await new Promise(r => setTimeout(r, wait));

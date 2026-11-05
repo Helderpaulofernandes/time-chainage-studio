@@ -56,6 +56,21 @@ export function geometry(p, { width = 1200, ppd = null, height = null, compact =
   return { W, H: top + GH + bottomPad, ML, MR, PW, X, Xi, Y, Yi, top, GH, t0, t1, ppd: px, nd, SH, rowsTop, rowH, rowOf, headTop, AX, compact, img, L: L0, R: R0 };
 }
 
+// The symbol for a location on a header line at y = base (a..b is its extent for ranged locations).
+export function locSymbol(symbol, x, a, b, base, col) {
+  switch (symbol) {
+    case "trapezoid": { const aa = b - a < 16 ? (a + b) / 2 - 8 : a, bb = b - a < 16 ? (a + b) / 2 + 8 : b;
+      return `<path d="M${aa} ${base} L${aa + 4} ${base - 7} L${bb - 4} ${base - 7} L${bb} ${base}" fill="none" stroke="${col}" stroke-width="2.4"/>`; }
+    case "circle": return `<circle cx="${x}" cy="${base}" r="4.5" fill="${PAPER.sheet}" stroke="${col}" stroke-width="2.2"/>`;
+    case "tick": return `<line x1="${x}" x2="${x}" y1="${base - 8}" y2="${base + 4}" stroke="${col}" stroke-width="2"/>`;
+    case "box": return `<rect x="${Math.min(a, x - 3)}" y="${base - 6}" width="${Math.max(6, b - a)}" height="10" fill="${PAPER.sheet}" stroke="${col}" stroke-width="1.5"/>`;
+    case "triangle": return `<path d="M${x - 5} ${base + 3} L${x} ${base - 7} L${x + 5} ${base + 3}Z" fill="${col}"/>`;
+    case "bar": return `<line x1="${x}" x2="${x}" y1="${base - 10}" y2="${base + 5}" stroke="${col}" stroke-width="3.5"/>`;
+    case "band": return `<rect x="${a}" y="${base - 5}" width="${Math.max(3, b - a)}" height="8" fill="${col}" fill-opacity=".45" stroke="${col}"/>`;
+    default: return `<path d="M${x} ${base - 6} L${x + 5} ${base} L${x} ${base + 6} L${x - 5} ${base}Z" fill="${PAPER.sheet}" stroke="${col}" stroke-width="1.5"/>`;
+  }
+}
+
 const T = (x, y, s, attrs = "", style = "") => `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" ${attrs} style="${style}">${esc(s)}</text>`;
 const halo = `paint-order="stroke" stroke="${PAPER.sheet}" stroke-width="3" stroke-linejoin="round"`;
 const dashOf = d => (d === "dash" ? 'stroke-dasharray="10 6"' : d === "dot" ? 'stroke-dasharray="2 4"' : "");
@@ -103,17 +118,7 @@ export function renderChart(p, opts = {}) {
       let g = `<g data-loc="${l.id}" class="loc"><title>${esc(l.name)} · ${chFmt(p, l.ch_m)}${l.to_m != null ? "–" + chFmt(p, l.to_m) : ""}${l.notes ? " · " + esc(l.notes) : ""}</title>`;
       const a = Math.min(x, x2), b = Math.max(x, x2);
       g += `<rect x="${a - 5}" y="${ry}" width="${Math.max(10, b - a + 10)}" height="${rh}" fill="transparent"/>`;
-      switch (t.symbol) {
-        case "trapezoid": { const aa = b - a < 16 ? (a + b) / 2 - 8 : a, bb = b - a < 16 ? (a + b) / 2 + 8 : b;
-          g += `<path d="M${aa} ${base} L${aa + 4} ${base - 7} L${bb - 4} ${base - 7} L${bb} ${base}" fill="none" stroke="${col}" stroke-width="2.4"/>`; break; }
-        case "circle": g += `<circle cx="${x}" cy="${base}" r="4.5" fill="${PAPER.sheet}" stroke="${col}" stroke-width="2.2"/>`; break;
-        case "tick": g += `<line x1="${x}" x2="${x}" y1="${base - 8}" y2="${base + 4}" stroke="${col}" stroke-width="2"/>`; break;
-        case "box": g += `<rect x="${Math.min(a, x - 3)}" y="${base - 6}" width="${Math.max(6, b - a)}" height="10" fill="${PAPER.sheet}" stroke="${col}" stroke-width="1.5"/>`; break;
-        case "triangle": g += `<path d="M${x - 5} ${base + 3} L${x} ${base - 7} L${x + 5} ${base + 3}Z" fill="${col}"/>`; break;
-        case "bar": g += `<line x1="${x}" x2="${x}" y1="${base - 10}" y2="${base + 5}" stroke="${col}" stroke-width="3.5"/>`; break;
-        case "band": g += `<rect x="${a}" y="${base - 5}" width="${Math.max(3, b - a)}" height="8" fill="${col}" fill-opacity=".45" stroke="${col}"/>`; break;
-        default: g += `<path d="M${x} ${base - 6} L${x + 5} ${base} L${x} ${base + 6} L${x - 5} ${base}Z" fill="${PAPER.sheet}" stroke="${col}" stroke-width="1.5"/>`;
-      }
+      g += locSymbol(t.symbol, x, a, b, base, col);
       if (l.label) g += `<text transform="translate(${(x + 3).toFixed(1)},${(base - 10).toFixed(1)}) rotate(-90)" font-size="${fs - 1}" font-family="${FONT}" fill="${PAPER.ink}" ${sel ? 'text-decoration="underline"' : ""}>${esc(l.name)}<tspan dx="5" fill="${col}" font-family="${MONO}" font-size="${fs - 2}">${chFmt(p, l.ch_m)}</tspan></text>`;
       if (sel) g += `<rect x="${a - 6}" y="${ry + 1}" width="${Math.max(12, b - a + 12)}" height="${rh - 2}" fill="none" stroke="${PAPER.sel}" stroke-width="2"/>`;
       o += g + "</g>";
@@ -274,15 +279,16 @@ export function renderChart(p, opts = {}) {
 export function playDynamic(p, G, t) {
   const S = styleMap(p), { X, Y, L, R, top, GH } = G, fs = G.compact ? 9 : 11, up = p.time.orientation === "up";
   const yp = Y(t), clipY = up ? yp : top, clipH = Math.max(0, up ? top + GH - yp : yp - top);
-  const fronts = activeAt(p, t).map(({ a, frac }) => ({ a, st: S[a.style] || {}, m: a.ch0_m + (a.ch1_m - a.ch0_m) * frac }));
+  const fronts = activeAt(p, t).map(({ a, frac, paused }) => ({ a, paused, st: S[a.style] || {}, m: a.ch0_m + (a.ch1_m - a.ch0_m) * frac }));
   let grid = "", topSvg = "";
-  for (const { a, st, m } of fronts) {
+  for (const { a, st, m, paused } of fronts) {
     const col = st.colour || PAPER.ink, x = X(m), kind = st.kind || "line";
     if (kind === "block") {
       const xa = Math.min(X(a.ch0_m), X(a.ch1_m)), w = Math.max(4, Math.abs(X(a.ch1_m) - X(a.ch0_m)));
       grid += `<rect x="${(xa - 2).toFixed(1)}" y="${(yp - 4).toFixed(1)}" width="${(w + 4).toFixed(1)}" height="8" fill="${col}" stroke="${PAPER.sheet}" stroke-width="1.5"><title>${esc(a.name)} – working</title></rect>`;
     } else if (kind !== "milestone") {
-      grid += `<circle cx="${x.toFixed(1)}" cy="${yp.toFixed(1)}" r="6.5" fill="${col}" stroke="${PAPER.sheet}" stroke-width="2"><title>${esc(a.name)} · ${chFmt(p, m)}</title></circle>`;
+      grid += paused ? `<circle cx="${x.toFixed(1)}" cy="${yp.toFixed(1)}" r="5.5" fill="${PAPER.sheet}" stroke="${col}" stroke-width="2.5"><title>${esc(a.name)} · ${chFmt(p, m)} · stood down</title></circle>`
+        : `<circle cx="${x.toFixed(1)}" cy="${yp.toFixed(1)}" r="6.5" fill="${col}" stroke="${PAPER.sheet}" stroke-width="2"><title>${esc(a.name)} · ${chFmt(p, m)}</title></circle>`;
       grid += T(x + 9, yp - 7, a.code || a.name, `font-size="${fs - 1}" font-weight="600" font-family="${FONT}" ${halo}`, `fill:${col}`);
     }
   }
@@ -301,18 +307,63 @@ export function playDynamic(p, G, t) {
   return { clipY, clipH, grid, top: topSvg, y: yp, count: fronts.length };
 }
 
-// Activities of the main data set under way at time t, with how far along each is (0..1).
+// ------------------------------------------------------------------ progress (shared by the chart and the corridor view)
+// Per project, per activity: start, finish and the stand-down intervals that stop its crew. Built on first use and
+// thrown away by resetProgress(p) whenever the project changes, so a playback frame never re-scans the time markers.
+const PCACHE = new WeakMap();
+export function resetProgress(p) { if (p) PCACHE.delete(p); }
+function shutdowns(p) {
+  return (p.time_markers || []).filter(m => m.kind === "shutdown" && m.finish).map(m => {
+    const a = m.ch0_m ?? -Infinity, b = m.ch1_m ?? Infinity;
+    return { s: tms(m.start), f: tms(m.finish), a: Math.min(a, b), b: Math.max(a, b) };
+  }).filter(m => m.f > m.s);
+}
+export function progressInfo(p, a) {
+  let c = PCACHE.get(p);
+  if (!c) { c = { acts: new WeakMap(), sd: p.view?.pause_on_shutdowns ? shutdowns(p) : [] }; PCACHE.set(p, c); }
+  let k = c.acts.get(a);
+  if (k) return k;
+  const s = tms(a.start), f = tms(a.finish), lo = Math.min(a.ch0_m, a.ch1_m), hi = Math.max(a.ch0_m, a.ch1_m);
+  const iv = c.sd.filter(m => m.s < f && m.f > s && m.a <= hi && m.b >= lo).map(m => [Math.max(s, m.s), Math.min(f, m.f)]).sort((x, y) => x[0] - y[0]);
+  const merged = [];
+  for (const [x, y] of iv) { const l = merged[merged.length - 1]; if (l && x <= l[1]) l[1] = Math.max(l[1], y); else merged.push([x, y]); }
+  const lost = merged.reduce((n, [x, y]) => n + (y - x), 0);
+  k = { s, f, iv: merged, work: f - s - lost };
+  c.acts.set(a, k);
+  return k;
+}
+// 0..1 progress of activity a at time t. If p.view.pause_on_shutdowns is on, time inside shutdown markers that overlap
+// the activity's chainage does not count: the crew stops and the remaining work is spread over the activity's
+// non-shutdown time, so the finish date is unchanged.
+export function progressAt(p, a, t) {
+  const { s, f, iv, work } = progressInfo(p, a);
+  if (!(f > s)) return t >= s ? 1 : 0;
+  if (t <= s) return 0;
+  if (t >= f) return 1;
+  if (!iv.length || work <= 0) return (t - s) / (f - s);
+  let lost = 0;
+  for (const [x, y] of iv) { if (t <= x) break; lost += Math.min(t, y) - x; }
+  return (t - s - lost) / work;
+}
+// True when t falls inside a stand-down that stops this activity's crew (only with pause_on_shutdowns on).
+export function isStoodDown(p, a, t) {
+  const { iv } = progressInfo(p, a);
+  for (const [x, y] of iv) { if (t < x) return false; if (t < y) return true; }
+  return false;
+}
+
+// Activities of the main data set under way at time t, with how far along each is (0..1) and whether the crew is stood down.
 export function activeAt(p, t) {
   const out = [];
   for (const a of p.activities) {
     if (a.dataset !== p.view.main_dataset) continue;
-    const s = tms(a.start), f = tms(a.finish);
-    if (t >= s && t <= f && f > s) out.push({ a, frac: (t - s) / (f - s) });
+    const { s, f } = progressInfo(p, a);
+    if (t >= s && t <= f && f > s) out.push({ a, frac: progressAt(p, a, t), paused: isStoodDown(p, a, t) });
   }
   return out;
 }
 
-function chainageAxis(p, G, y, topSide) {
+export function chainageAxis(p, G, y, topSide) {
   const c = p.chainage, fs = G.compact ? 9 : 10.5;
   let o = `<line x1="${G.L}" x2="${G.R}" y1="${y}" y2="${y}" stroke="${PAPER.muted}"/>`;
   const step = c.minor_m > 0 ? c.minor_m : c.major_m > 0 ? c.major_m : (c.end_m - c.start_m) / 10;

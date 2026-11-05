@@ -1,5 +1,6 @@
 // Modal dialogs: project setup, open, imports, P6 field mapping and sync, productivities.
 import { api } from "./api.js";
+import { corridorLanes, STAGE_COLOURS } from "./corridor.js";
 import { h, esc, $, $$, chFmt, chToM, mToCh, uid, tms, niceDate, niceFinish, unitFactor, setDateOrder, chIsStation } from "./util.js";
 
 // ------------------------------------------------------------------ modal framework
@@ -397,7 +398,7 @@ export function productivities(app) {
 }
 
 // ------------------------------------------------------------------ playback video
-export function videoDialog(app, { t0, t1, onDone }) {
+export function videoDialog(app, { t0, t1, mode = "both", onDone }) {
   const iso = ms => new Date(ms).toISOString().slice(0, 10);
   let cancel = false, busy = false;
   modal({
@@ -408,6 +409,7 @@ export function videoDialog(app, { t0, t1, onDone }) {
       h("div", { class: "row2" },
         field("Video length (seconds)", inp("vd-len", 20, { type: "number", min: 3, max: 300, step: 1 }), "The whole period plays in this time, then the last frame holds for 2 s."),
         field("Size", sel("vd-size", [["1920x1080", "1920 × 1080 (Full HD)"], ["1280x720", "1280 × 720"], ["3840x2160", "3840 × 2160 (4K, slow)"]], "1920x1080"))),
+      field("View", sel("vd-mode", [["both", "Both: corridor above the chart"], ["chart", "Chart only"], ["corridor", "Corridor only"]], mode)),
       h("progress", { id: "vd-prog", max: 1, value: 0, hidden: true, style: "width:100%" })),
     buttons: [
       { label: "Close", onClick: ({ close }) => { cancel = true; close(); } },
@@ -421,7 +423,7 @@ export function videoDialog(app, { t0, t1, onDone }) {
         setMsg("Making the video… keep this tab open.");
         try {
           const { exportVideo } = await import("./video.js");
-          const r = await exportVideo(app.p, { t0: a, t1: b, seconds: secs, W, H, onProgress: f => { prog.value = f; setMsg(`Making the video… ${Math.round(f * 100)}%`); return !cancel; } });
+          const r = await exportVideo(app.p, { t0: a, t1: b, seconds: secs, W, H, mode: val(dlg, "vd-mode"), onProgress: f => { prog.value = f; setMsg(`Making the video… ${Math.round(f * 100)}%`); return !cancel; } });
           if (!r) { setMsg("Cancelled."); return; }
           onDone(r);
           setMsg(`Saved a ${(r.blob.size / 1e6).toFixed(1)} MB ${r.ext.toUpperCase()} video.`, "ok");
@@ -429,6 +431,68 @@ export function videoDialog(app, { t0, t1, onDone }) {
         } finally { busy = false; }
       } }],
     onClose: () => (cancel = true),
+  });
+}
+
+// ------------------------------------------------------------------ corridor view settings
+export function corridorSettings(app) {
+  const p = app.p, cor = p.view.corridor, names = Object.fromEntries(p.styles.map(s => [s.code, s.name || s.code]));
+  const cols = Object.fromEntries(p.styles.map(s => [s.code, s.colour]));
+  const used = [...new Set(corridorLanes(p, { withHidden: true }).flatMap(l => l.styles))];
+  const tbody = h("tbody");
+  const row = (code, lane, show) => {
+    const tr = h("tr", { "data-code": code },
+      h("td", {}, h("button", { type: "button", title: "Move up", onclick: () => tr.previousElementSibling && tr.parentNode.insertBefore(tr, tr.previousElementSibling) }, "▲"),
+        h("button", { type: "button", title: "Move down", onclick: () => tr.nextElementSibling && tr.parentNode.insertBefore(tr.nextElementSibling, tr) }, "▼")),
+      h("td", {}, h("span", { class: "sw", style: `background:${cols[code] || "#5D6B70"}` }), names[code] || code),
+      h("td", {}, h("input", { type: "text", class: "ln", value: lane, title: "Styles with the same lane name share one lane" })),
+      h("td", {}, h("input", { type: "checkbox", class: "sh", checked: show, title: "Show this lane" })));
+    return tr;
+  };
+  const fill = lanes => { tbody.innerHTML = ""; lanes.forEach(l => l.styles.forEach(c => tbody.append(row(c, l.label, !l.hidden)))); };
+  fill(corridorLanes(p, { withHidden: true }));
+  const stageRow = k => {
+    const sg = (cor.stages || [])[k] || {};
+    const s = sel(`cs-st${k}`, [["", "— none —"], ...used.map(c => [c, names[c] || c])], sg.style || "");
+    return h("tr", {}, h("td", {}, `Stage ${k + 1}`), h("td", {}, s),
+      h("td", {}, inp(`cs-lb${k}`, sg.label || "", { type: "text", placeholder: "e.g. Sleepers in" })),
+      h("td", {}, inp(`cs-co${k}`, sg.colour || STAGE_COLOURS[k], { type: "color" })));
+  };
+  modal({
+    title: "Corridor view settings", wide: true,
+    body: el => el.append(
+      h("p", { class: "hint" }, "During playback the corridor view shows each crew moving along its lane by chainage, above the chart. Give styles the same lane name to put them in one crew lane; untick a lane to hide it."),
+      h("table", { class: "lanes-tbl" }, h("thead", {}, h("tr", {}, h("th", {}, ""), h("th", {}, "Style"), h("th", {}, "Lane"), h("th", {}, "Show"))), tbody),
+      h("div", { class: "btns" }, h("button", { type: "button", onclick: () => fill(corridorLanes({ ...p, view: { ...p.view, corridor: { ...cor, lanes: null } } }, { withHidden: true })) }, "One lane per style")),
+      h("h3", {}, "Track state"),
+      h("p", { class: "hint" }, "Up to three stages paint the track line as their work is completed, in this order (a later stage paints over an earlier one), with a length-complete counter for each."),
+      h("table", { class: "lanes-tbl" }, h("tbody", {}, stageRow(0), stageRow(1), stageRow(2))),
+      h("div", { class: "row2" },
+        field("Look-ahead (days)", inp("cs-look", cor.lookahead_days ?? 21, { type: "number", min: 0, max: 365, step: 1 }), "Work starting within this many days shows as a dashed line."),
+        field("Lane height (px)", inp("cs-lh", cor.lane_height ?? 30, { type: "number", min: 14, max: 80, step: 1 }))),
+      h("label", { class: "chk" }, h("input", { type: "checkbox", id: "cs-tags", checked: cor.show_tags !== false }), " Show crew tags (activity code)"),
+      h("label", { class: "chk" }, h("input", { type: "checkbox", id: "cs-pause", checked: !!p.view.pause_on_shutdowns }),
+        " Pause crews during stand-downs (shutdown time markers that cover the activity's chainage). Finish dates do not change; the chart's work fronts pause too.")),
+    buttons: [{ label: "Cancel" }, { label: "Apply", primary: true, onClick: ({ close, dlg }) => {
+      const groups = [], byName = {};
+      $$("tr[data-code]", dlg).forEach(tr => {
+        const code = tr.dataset.code, lane = $(".ln", tr).value.trim() || names[code] || code, show = $(".sh", tr).checked;
+        if (!show) { groups.push({ label: lane, styles: [code], hidden: true }); return; }
+        const k = lane.toLowerCase();
+        if (!byName[k]) groups.push((byName[k] = { label: lane, styles: [] }));
+        byName[k].styles.push(code);
+      });
+      app.commit();
+      const c = p.view.corridor;
+      c.lanes = groups;
+      c.stages = [0, 1, 2].map(k => ({ style: val(dlg, `cs-st${k}`), label: val(dlg, `cs-lb${k}`).trim(), colour: val(dlg, `cs-co${k}`) }))
+        .filter(s => s.style).map(s => ({ ...s, label: s.label || names[s.style] || s.style }));
+      c.lookahead_days = Math.max(0, +val(dlg, "cs-look") || 0);
+      c.lane_height = Math.min(80, Math.max(14, +val(dlg, "cs-lh") || 30));
+      c.show_tags = $("#cs-tags", dlg).checked;
+      p.view.pause_on_shutdowns = $("#cs-pause", dlg).checked;
+      app.changed(); close();
+    } }],
   });
 }
 

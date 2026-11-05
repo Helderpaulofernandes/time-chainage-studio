@@ -51,6 +51,7 @@
 
     <div class="main">
       <section id="chart-view">
+        <div id="corridor-wrap" hidden><svg id="corridor" role="img" aria-label="Corridor view: crews moving along the corridor"></svg></div>
         <div id="chart-scroll"><svg id="chart" role="img" aria-label="Time chainage chart"></svg></div>
         <div id="playbar" class="playbar" hidden>
           <button type="button" id="pb-play" class="primary" title="Play or pause (Space)">Play</button>
@@ -63,6 +64,9 @@
           <label class="chk" for="pb-follow"><input type="checkbox" id="pb-follow" checked> Follow</label>
           <label class="chk" for="pb-loop"><input type="checkbox" id="pb-loop"> Loop</label>
           <span id="pb-active" class="pb-active"></span>
+          <div class="seg" id="pb-mode" role="group" aria-label="Show">
+            <button type="button" data-show="chart" title="Time–chainage chart only">Chart</button><button type="button" data-show="corridor" title="Crews on the corridor only">Corridor</button><button type="button" data-show="both" title="Corridor above the chart">Both</button></div>
+          <button type="button" id="pb-cor" title="Lanes, track stages, look-ahead and stand-downs">Corridor…</button>
           <button type="button" id="pb-frame" title="Save this moment as a picture">Save frame</button>
           <button type="button" id="pb-video" title="Export the playback as an MP4 video">Export video…</button>
           <button type="button" id="pb-close" title="Stop playback (Esc)">Close</button>
