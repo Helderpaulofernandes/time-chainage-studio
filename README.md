@@ -44,6 +44,7 @@ Then open http://localhost:8765. The Python server in `server/` also offers the 
 | TurboChart .tchart import and export (all data sets, comparison chart) | done |
 | Page layout (paper, margins, title, title block, chart, legend, notes), print, SVG/PNG export | done |
 | Playback: View → Play the programme runs a date line down the chart; work fronts and crew positions move, done work fills in, future work stays faint | done |
+| Playback export: an MP4 video (720p, 1080p or 4K, any length) or a PNG of any moment, made in the browser | done |
 | Live P6 connection (EPPM web services, Primavera Cloud REST, P6 Pro database) | next phase |
 
 ## Units (metric and US)
@@ -81,4 +82,4 @@ server/             optional Python REST API with the same imports/exports
 .github/workflows/  publishes web/ to GitHub Pages on every push
 ```
 
-Excel reading uses [SheetJS](https://sheetjs.com) and [JSZip](https://stuk.github.io/jszip/), loaded from cdnjs.
+Excel reading uses [SheetJS](https://sheetjs.com) and [JSZip](https://stuk.github.io/jszip/), loaded from cdnjs. Video export uses the browser's WebCodecs encoder and [mp4-muxer](https://github.com/Vanilagy/mp4-muxer), loaded from jsDelivr only when you export.

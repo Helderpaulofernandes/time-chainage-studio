@@ -396,6 +396,42 @@ export function productivities(app) {
     buttons: [{ label: "Close" }] });
 }
 
+// ------------------------------------------------------------------ playback video
+export function videoDialog(app, { t0, t1, onDone }) {
+  const iso = ms => new Date(ms).toISOString().slice(0, 10);
+  let cancel = false, busy = false;
+  modal({
+    title: "Export playback video",
+    body: el => el.append(
+      h("p", { class: "hint" }, "Records the playback of the option shown on the chart, with the date and the legend on every frame. The video is made on your PC; nothing is uploaded."),
+      h("div", { class: "row2" }, field("From", inp("vd-from", iso(t0), { type: "date" })), field("To", inp("vd-to", iso(t1), { type: "date" }))),
+      h("div", { class: "row2" },
+        field("Video length (seconds)", inp("vd-len", 20, { type: "number", min: 3, max: 300, step: 1 }), "The whole period plays in this time, then the last frame holds for 2 s."),
+        field("Size", sel("vd-size", [["1920x1080", "1920 × 1080 (Full HD)"], ["1280x720", "1280 × 720"], ["3840x2160", "3840 × 2160 (4K, slow)"]], "1920x1080"))),
+      h("progress", { id: "vd-prog", max: 1, value: 0, hidden: true, style: "width:100%" })),
+    buttons: [
+      { label: "Close", onClick: ({ close }) => { cancel = true; close(); } },
+      { label: "Export video", primary: true, onClick: async ({ setMsg, dlg, close }) => {
+        if (busy) return;
+        const a = Date.parse(val(dlg, "vd-from")), b = Date.parse(val(dlg, "vd-to")) + 864e5;
+        if (!(b > a)) return setMsg("The end date must be after the start date.", "err");
+        const [W, H] = val(dlg, "vd-size").split("x").map(Number), secs = Math.max(3, Math.min(300, +val(dlg, "vd-len") || 20));
+        busy = true; cancel = false;
+        const prog = $("#vd-prog", dlg); prog.hidden = false;
+        setMsg("Making the video… keep this tab open.");
+        try {
+          const { exportVideo } = await import("./video.js");
+          const r = await exportVideo(app.p, { t0: a, t1: b, seconds: secs, W, H, onProgress: f => { prog.value = f; setMsg(`Making the video… ${Math.round(f * 100)}%`); return !cancel; } });
+          if (!r) { setMsg("Cancelled."); return; }
+          onDone(r);
+          setMsg(`Saved a ${(r.blob.size / 1e6).toFixed(1)} MB ${r.ext.toUpperCase()} video.`, "ok");
+          if (r.ext === "mp4") setTimeout(close, 1500);
+        } finally { busy = false; }
+      } }],
+    onClose: () => (cancel = true),
+  });
+}
+
 // ------------------------------------------------------------------ images
 export function readImage(file) {
   return new Promise((res, rej) => {

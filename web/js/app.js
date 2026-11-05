@@ -60,7 +60,7 @@ const MENU = {
     ["Open project file from my PC…", "", () => openFromPc()], ["Save to a file on my PC…", "", () => need() && linkFile()], ["Reload from file", "", () => need() && reloadFile()], ["Download a copy (.json)", "", () => need() && exportFile("json")], "-", ["Duplicate project", "", () => need() && api.duplicate(app.p.id).then(p => { app.open(p); toast("Copy opened"); })], "-",
     ["Import Excel workbook…", "", () => D.importExcel(app)], ["Import from P6 (XER) with mapping…", "", () => D.p6Dialog(app, "import")], ["Import TurboChart (.tchart)…", "", () => D.importTchart(app)], ["Open project file (.json)…", "", () => D.importJson(app)], "-",
     ["Export P6 XER (main data set)", "", () => need() && exportFile("xer", app.p.view.main_dataset)], ["Export TurboChart (.tchart)", "", () => need() && exportFile("tchart")], 
-    ["Export chart as SVG", "", () => need() && exportChartSvg()], "-",
+    ["Export chart as SVG", "", () => need() && exportChartSvg()], ["Export playback video…", "", () => need() && openVideo()], "-",
     ["Page layout…", "Ctrl+L", () => need() && setView("page")], ["Print…", "Ctrl+P", () => need() && printPage(app.p)], ["Export page as PNG", "", () => need() && exportPng(app.p)]],
   Edit: [["Undo", "Ctrl+Z", undo], ["Redo", "Ctrl+Y", redo], "-", ["Duplicate selection", "Ctrl+D", () => dupSel()], ["Delete selection", "Del", () => delSel()]],
   View: [["Play the programme", "", () => need() && playOpen()], "-", ["Chart", "", () => setView("chart")], ["Page layout", "", () => need() && setView("page")], "-",
@@ -552,6 +552,11 @@ function exportChartSvg() {
 // ------------------------------------------------------------------ wiring
 // ------------------------------------------------------------------ playback: run the programme as if it is happening
 const play = { on: false, running: false, t: 0, t0: 0, t1: 0, last: 0, drawn: 0, raf: 0 };
+const fileBase = () => (app.p.name || "time_chainage").replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "");
+function openVideo() {
+  playStop(); playRange();
+  D.videoDialog(app, { t0: play.t0, t1: play.t1 - DAY, onDone: r => download(`${fileBase()}_playback.${r.ext}`, r.blob, r.blob.type) });
+}
 function playRange() {
   const p = app.p, acts = p.activities.filter(a => a.dataset === p.view.main_dataset);
   const s = acts.length ? Math.min(...acts.map(a => tms(a.start))) : tms(p.time.start), f = acts.length ? Math.max(...acts.map(a => tms(a.finish))) : tms(p.time.finish) + DAY;
@@ -610,6 +615,8 @@ function wire() {
   $("#pb-play").onclick = playToggle;
   $("#pb-start").onclick = () => playSeek(play.t0);
   $("#pb-close").onclick = () => playClose();
+  $("#pb-frame").onclick = async () => { const { exportFrame } = await import("./video.js"); download(`${fileBase()}_${new Date(play.t).toISOString().slice(0, 10)}.png`, await exportFrame(app.p, play.t), "image/png"); };
+  $("#pb-video").onclick = () => openVideo();
   $("#pb-slider").oninput = e => { playStop(); playSeek(play.t0 + (+e.target.value / 1000) * (play.t1 - play.t0)); };
   buildMenus();
   $$("#tools button[data-mode]").forEach(b => b.addEventListener("click", () => setMode(b.dataset.mode)));
