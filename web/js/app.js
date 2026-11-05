@@ -1,6 +1,6 @@
 // Time-Chainage Studio front end: menus, chart interaction, side panels, undo and autosave.
 import { api } from "./api.js";
-import { renderChart, renderLegend, geometry, styleMap } from "./render.js";
+import { renderChart, renderLegend, geometry, styleMap, activeAt, playDynamic } from "./render.js";
 import { DAY, tms, tstr, dstr, niceDate, niceFinish, chFmt, chToM, mToCh, chLabel, chIsStation, lenUnit, lenFromM, setDateOrder, esc, $, $$, h, uid, clamp, download, debounce, DOW } from "./util.js";
 // chainage inputs: text boxes on station projects ("12+34.56"), number boxes otherwise
 const chAttrs = (p, extra = {}) => (chIsStation(p) ? { type: "text", inputmode: "decimal", placeholder: p.chainage.unit === "ft" ? "12+34.56" : "12+345", ...extra } : { type: "number", step: "any", ...extra });
@@ -13,7 +13,7 @@ const app = {
   commit() { this.pushUndo(JSON.stringify(this.p)); },
   pushUndo(s) { this.undoS.push(s); if (this.undoS.length > 80) this.undoS.shift(); this.redoS = []; },
   changed(rerender = true) { this.saveState = "Unsaved changes"; status(); save(); if (rerender) render(); },
-  open(p, fresh = false) { setDateOrder((p.locale || {}).date_order); this.p = p; this.rev = p.rev || 0; this.stale = false; this.file = null; refreshFile(fresh); this.sel = null; this.undoS = []; this.redoS = []; try { localStorage.setItem("tcs-last", p.id); } catch (e) { /* storage blocked */ } this.saveState = "Saved"; render(); },
+  open(p, fresh = false) { if (play.on) playClose(true); setDateOrder((p.locale || {}).date_order); this.p = p; this.rev = p.rev || 0; this.stale = false; this.file = null; refreshFile(fresh); this.sel = null; this.undoS = []; this.redoS = []; try { localStorage.setItem("tcs-last", p.id); } catch (e) { /* storage blocked */ } this.saveState = "Saved"; render(); },
   load(p) { this.commit(); setDateOrder((p.locale || {}).date_order); this.p = p; this.rev = p.rev || 0; this.sel = null; render(); },
   rev: 0, stale: false, // server revision of the copy this window last read or saved; undo never changes it
   toast,
@@ -63,7 +63,7 @@ const MENU = {
     ["Export chart as SVG", "", () => need() && exportChartSvg()], "-",
     ["Page layout…", "Ctrl+L", () => need() && setView("page")], ["Print…", "Ctrl+P", () => need() && printPage(app.p)], ["Export page as PNG", "", () => need() && exportPng(app.p)]],
   Edit: [["Undo", "Ctrl+Z", undo], ["Redo", "Ctrl+Y", redo], "-", ["Duplicate selection", "Ctrl+D", () => dupSel()], ["Delete selection", "Del", () => delSel()]],
-  View: [["Chart", "", () => setView("chart")], ["Page layout", "", () => need() && setView("page")], "-",
+  View: [["Play the programme", "", () => need() && playOpen()], "-", ["Chart", "", () => setView("chart")], ["Page layout", "", () => need() && setView("page")], "-",
     ["Zoom time in", "Ctrl+=", () => zoomT(1.25)], ["Zoom time out", "Ctrl+-", () => zoomT(0.8)], ["Fit time to window", "", () => fitTime()],
     ["Zoom chainage in", "", () => { app.xZoom = Math.min(20, app.xZoom * 1.5); render(); }], ["Zoom chainage out", "", () => { app.xZoom = Math.max(1, app.xZoom / 1.5); render(); }], ["Fit chainage", "", () => { app.xZoom = 1; render(); }], "-",
     ["Labels", "", () => toggle("show_labels"), () => app.p?.view.show_labels !== false], ["Footprints", "", () => toggle("show_footprints"), () => app.p?.view.show_footprints !== false],
@@ -163,7 +163,7 @@ let G = null;
 function drawChart() {
   const box = $("#chart-scroll"), svg = $("#chart");
   const width = Math.max(700, (box.clientWidth - 2) * app.xZoom);
-  const r = renderChart(app.p, { width, selection: app.sel, interactive: true });
+  const r = renderChart(app.p, { width, selection: play.on ? null : app.sel, interactive: true, playTime: play.on ? play.t : null });
   G = r.G;
   svg.setAttribute("viewBox", `0 0 ${G.W} ${G.H}`); svg.setAttribute("width", G.W); svg.setAttribute("height", G.H);
   svg.innerHTML = r.svg;
@@ -197,7 +197,7 @@ const snapM = m => { const s = +app.p.chainage.snap_m || 0; return s > 0 ? Math.
 const snapT = ms => Math.round(ms / (DAY / (G.ppd >= 24 ? 24 : G.ppd >= 6 ? 4 : 1))) * (DAY / (G.ppd >= 24 ? 24 : G.ppd >= 6 ? 4 : 1));
 
 svgEl.addEventListener("pointerdown", e => {
-  if (e.button !== 0 || !app.p) return;
+  if (e.button !== 0 || !app.p || play.on) return;
   const q = pt(e);
   if (app.mode === "draw") { if (!inGrid(q)) return; drag = { type: "draw", q0: q, q1: q }; svgEl.setPointerCapture(e.pointerId); return; }
   const hd = e.target.closest("[data-h]"), ac = e.target.closest("[data-act]"), mk = e.target.closest("[data-mk]"), lc = e.target.closest("[data-loc]");
@@ -275,6 +275,8 @@ document.addEventListener("keydown", e => {
   if (mod && k === "-") { e.preventDefault(); zoomT(0.8); return; }
   if (mod) return;
   if ((k === "delete" || k === "backspace") && app.sel) { e.preventDefault(); delSel(); }
+  if (play.on && k === " ") { e.preventDefault(); playToggle(); return; }
+  if (k === "escape" && play.on) { playClose(); return; }
   if (k === "escape") { app.sel = null; setMode("select"); render(); }
   if (k === "v") setMode("select"); if (k === "d") setMode("draw");
 });
@@ -548,7 +550,67 @@ function exportChartSvg() {
 }
 
 // ------------------------------------------------------------------ wiring
+// ------------------------------------------------------------------ playback: run the programme as if it is happening
+const play = { on: false, running: false, t: 0, t0: 0, t1: 0, last: 0, drawn: 0, raf: 0 };
+function playRange() {
+  const p = app.p, acts = p.activities.filter(a => a.dataset === p.view.main_dataset);
+  const s = acts.length ? Math.min(...acts.map(a => tms(a.start))) : tms(p.time.start), f = acts.length ? Math.max(...acts.map(a => tms(a.finish))) : tms(p.time.finish) + DAY;
+  play.t0 = Math.max(tms(p.time.start), s - 7 * DAY); play.t1 = Math.min(tms(p.time.finish) + DAY, f + 7 * DAY);
+}
+function playOpen() {
+  if (app.view !== "chart") setView("chart");
+  playRange(); play.on = true; play.t = play.t0; app.sel = null;
+  $("#playbar").hidden = false; $("#b-play").setAttribute("aria-pressed", "true"); svgEl.classList.add("playing");
+  drawChart(); playUi(); playFollow(true); playStart();
+}
+function playClose(quiet) {
+  playStop(); play.on = false; $("#playbar").hidden = true; $("#b-play").setAttribute("aria-pressed", "false"); svgEl.classList.remove("playing");
+  if (!quiet && app.p) drawChart();
+}
+function playStart() {
+  if (play.t >= play.t1) play.t = play.t0;
+  play.running = true; play.last = performance.now(); $("#pb-play").textContent = "Pause";
+  cancelAnimationFrame(play.raf); play.raf = requestAnimationFrame(playFrame);
+}
+function playStop() { play.running = false; cancelAnimationFrame(play.raf); const b = $("#pb-play"); if (b) b.textContent = "Play"; }
+function playToggle() { play.running ? playStop() : playStart(); }
+function playFrame(now) {
+  if (!play.running) return;
+  const dt = Math.min(1000, now - play.last); play.last = now;
+  play.t += (+$("#pb-speed").value || 7) * DAY * dt / 1000;
+  if (play.t >= play.t1) { if ($("#pb-loop").checked) play.t = play.t0; else { play.t = play.t1; playStop(); } }
+  if (now - play.drawn > 30 || !play.running) { play.drawn = now; playFrameDraw(); playUi(); playFollow(); }
+  if (play.running) play.raf = requestAnimationFrame(playFrame);
+}
+function playSeek(t) { play.t = clamp(t, play.t0, play.t1); playFrameDraw(); playUi(); playFollow(); }
+// update only what moves; fall back to a full redraw if the chart was redrawn without playback parts
+function playFrameDraw() {
+  const clip = $("#play-clip"), grid = $("#play-grid"), topG = $("#play-top");
+  if (!clip || !grid || !topG || !G) return drawChart();
+  const d = playDynamic(app.p, G, play.t);
+  clip.setAttribute("y", d.clipY); clip.setAttribute("height", d.clipH);
+  grid.innerHTML = d.grid; topG.innerHTML = d.top; G.playY = d.y;
+}
+function playUi() {
+  const span = play.t1 - play.t0 || 1;
+  $("#pb-slider").value = Math.round(((play.t - play.t0) / span) * 1000);
+  const d = new Date(play.t);
+  $("#pb-date").textContent = `${DOW[d.getUTCDay()]} ${niceDate(play.t)}`;
+  const n = activeAt(app.p, play.t).length;
+  $("#pb-active").textContent = n ? `${n} activit${n === 1 ? "y" : "ies"} under way` : "nothing under way";
+}
+function playFollow(force) {
+  if (!$("#pb-follow").checked || !G || G.playY == null) return;
+  const box = $("#chart-scroll"), y = G.playY, h = box.clientHeight;
+  if (force || y < box.scrollTop + h * 0.15 || y > box.scrollTop + h * 0.7) box.scrollTop = Math.max(0, y - h * 0.4);
+}
+
 function wire() {
+  $("#b-play").onclick = () => (need() && (play.on ? playClose() : playOpen()));
+  $("#pb-play").onclick = playToggle;
+  $("#pb-start").onclick = () => playSeek(play.t0);
+  $("#pb-close").onclick = () => playClose();
+  $("#pb-slider").oninput = e => { playStop(); playSeek(play.t0 + (+e.target.value / 1000) * (play.t1 - play.t0)); };
   buildMenus();
   $$("#tools button[data-mode]").forEach(b => b.addEventListener("click", () => setMode(b.dataset.mode)));
   $("#b-undo").onclick = undo; $("#b-redo").onclick = redo;

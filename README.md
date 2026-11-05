@@ -43,6 +43,7 @@ Then open http://localhost:8765. The Python server in `server/` also offers the 
 | P6 XER export (Start Chainage, End Chainage, Activity Style UDFs; 24 h 7-day calendar) | done |
 | TurboChart .tchart import and export (all data sets, comparison chart) | done |
 | Page layout (paper, margins, title, title block, chart, legend, notes), print, SVG/PNG export | done |
+| Playback: View → Play the programme runs a date line down the chart; work fronts and crew positions move, done work fills in, future work stays faint | done |
 | Live P6 connection (EPPM web services, Primavera Cloud REST, P6 Pro database) | next phase |
 
 ## Units (metric and US)

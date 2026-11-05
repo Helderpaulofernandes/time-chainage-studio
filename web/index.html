@@ -42,6 +42,7 @@
       </div>
       <div class="seg"><button type="button" id="b-undo" title="Undo (Ctrl+Z)">Undo</button><button type="button" id="b-redo" title="Redo (Ctrl+Y)">Redo</button></div>
       <div class="seg"><button type="button" id="b-zout" title="Zoom time out">Time −</button><button type="button" id="b-zin" title="Zoom time in">Time +</button><button type="button" id="b-fit" title="Fit the period to the window">Fit</button></div>
+      <button type="button" id="b-play" title="Play the programme as if it is happening">&#9654; Play</button>
       <label class="inline" for="ppd">px/day <input id="ppd" type="number" step="0.1" min="0.05"></label>
       <label class="inline" for="ds-main">Show <select id="ds-main"></select></label>
       <label class="inline" for="ds-cmp">Compare with <select id="ds-cmp"></select></label>
@@ -51,6 +52,19 @@
     <div class="main">
       <section id="chart-view">
         <div id="chart-scroll"><svg id="chart" role="img" aria-label="Time chainage chart"></svg></div>
+        <div id="playbar" class="playbar" hidden>
+          <button type="button" id="pb-play" class="primary" title="Play or pause (Space)">Play</button>
+          <button type="button" id="pb-start" title="Back to the start">|&lt;</button>
+          <input type="range" id="pb-slider" min="0" max="1000" step="1" value="0" aria-label="Playback date">
+          <span id="pb-date" class="pb-date"></span>
+          <label class="inline" for="pb-speed">Speed <select id="pb-speed">
+            <option value="1">1 day per second</option><option value="3">3 days per second</option><option value="7" selected>1 week per second</option>
+            <option value="14">2 weeks per second</option><option value="30">1 month per second</option><option value="91">3 months per second</option></select></label>
+          <label class="chk" for="pb-follow"><input type="checkbox" id="pb-follow" checked> Follow</label>
+          <label class="chk" for="pb-loop"><input type="checkbox" id="pb-loop"> Loop</label>
+          <span id="pb-active" class="pb-active"></span>
+          <button type="button" id="pb-close" title="Stop playback (Esc)">Close</button>
+        </div>
       </section>
       <section id="page-view" hidden>
         <div id="page-canvas"></div>

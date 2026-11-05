@@ -191,6 +191,7 @@ export function renderChart(p, opts = {}) {
   const kindOrder = { block: 0, bar: 1, line: 2, milestone: 3 };
   mainActs.sort((a, b) => (kindOrder[S[a.style]?.kind] ?? 2) - (kindOrder[S[b.style]?.kind] ?? 2));
   const geo = a => ({ x0: X(a.ch0_m), x1: X(a.ch1_m), y0: Y(tms(a.start)), y1: Y(tms(a.finish)) });
+  const actStart = o.length; // activity markup from here on is drawn twice during playback
   // footprints underneath everything
   if (view.show_footprints !== false) mainActs.forEach(a => {
     const st = S[a.style] || {}; const fp = { ...(st.footprint || {}), ...(a.footprint || {}) };
@@ -247,7 +248,16 @@ export function renderChart(p, opts = {}) {
     const anchor = lab.position === "start" ? "start" : lab.position === "end" ? "end" : "middle";
     o += `<text transform="translate(${mx.toFixed(1)},${my.toFixed(1)}) rotate(${ang.toFixed(2)})" y="${side}" text-anchor="${anchor}" font-size="${size}" font-weight="500" font-family="${FONT}" ${halo} fill="${tcol}" data-act="${a.id}">${esc(text)}</text>`;
   });
+  const PT = opts.playTime;
+  if (PT != null) {
+    // playback: the future faint, the past at full strength (cut off at the play date), plus the moving parts
+    const actsSvg = o.slice(actStart); o = o.slice(0, actStart);
+    const d = playDynamic(p, G, PT);
+    o += `<defs><clipPath id="playclip"><rect id="play-clip" x="${L}" y="${d.clipY}" width="${R - L}" height="${d.clipH}"/></clipPath></defs>`;
+    o += `<g opacity=".13">${actsSvg}</g><g clip-path="url(#playclip)">${actsSvg}</g><g id="play-grid">${d.grid}</g>`;
+  }
   o += `</g>`;
+  if (PT != null) { o += `<g id="play-top">${playDynamic(p, G, PT).top}</g>`; G.playY = Y(PT); }
   o += `<rect x="${L}" y="${top}" width="${R - L}" height="${GH}" fill="none" stroke="${PAPER.muted}"/>`;
   // selection handles (outside the clip so they stay grabbable)
   if (opts.selection?.kind === "act") {
@@ -257,6 +267,49 @@ export function renderChart(p, opts = {}) {
   }
   if (opts.interactive) o += `<g id="ov" pointer-events="none"><line id="xv" y1="${top}" y2="${top + GH}" stroke="${PAPER.muted}" stroke-width=".7" display="none"/><line id="xh" x1="${L}" x2="${R}" stroke="${PAPER.muted}" stroke-width=".7" display="none"/><line id="rb" stroke="${PAPER.ink}" stroke-width="2.5" stroke-dasharray="6 4" display="none"/></g>`;
   return { svg: o, G };
+}
+
+// The parts of a playback frame that move: cut-off of the done layer, work fronts, date line, date tag and crew markers.
+// Called once per frame; the rest of the chart is drawn once when playback starts.
+export function playDynamic(p, G, t) {
+  const S = styleMap(p), { X, Y, L, R, top, GH } = G, fs = G.compact ? 9 : 11, up = p.time.orientation === "up";
+  const yp = Y(t), clipY = up ? yp : top, clipH = Math.max(0, up ? top + GH - yp : yp - top);
+  const fronts = activeAt(p, t).map(({ a, frac }) => ({ a, st: S[a.style] || {}, m: a.ch0_m + (a.ch1_m - a.ch0_m) * frac }));
+  let grid = "", topSvg = "";
+  for (const { a, st, m } of fronts) {
+    const col = st.colour || PAPER.ink, x = X(m), kind = st.kind || "line";
+    if (kind === "block") {
+      const xa = Math.min(X(a.ch0_m), X(a.ch1_m)), w = Math.max(4, Math.abs(X(a.ch1_m) - X(a.ch0_m)));
+      grid += `<rect x="${(xa - 2).toFixed(1)}" y="${(yp - 4).toFixed(1)}" width="${(w + 4).toFixed(1)}" height="8" fill="${col}" stroke="${PAPER.sheet}" stroke-width="1.5"><title>${esc(a.name)} – working</title></rect>`;
+    } else if (kind !== "milestone") {
+      grid += `<circle cx="${x.toFixed(1)}" cy="${yp.toFixed(1)}" r="6.5" fill="${col}" stroke="${PAPER.sheet}" stroke-width="2"><title>${esc(a.name)} · ${chFmt(p, m)}</title></circle>`;
+      grid += T(x + 9, yp - 7, a.code || a.name, `font-size="${fs - 1}" font-weight="600" font-family="${FONT}" ${halo}`, `fill:${col}`);
+    }
+  }
+  grid += `<line x1="${L}" x2="${R}" y1="${yp.toFixed(1)}" y2="${yp.toFixed(1)}" stroke="#C00000" stroke-width="2"/>`;
+  topSvg += `<rect x="2" y="${(yp - 10).toFixed(1)}" width="${L - 8}" height="20" rx="3" fill="#C00000"/>` +
+    T((L - 6) / 2 + 2, yp + 4, niceDate(t), `text-anchor="middle" font-size="${fs}" font-weight="700" font-family="${FONT}"`, "fill:#fff");
+  // crew markers ride on the first header row (the track line), like trains on the diagram
+  let ty = G.rowsTop; const r1 = G.rowH.findIndex(hh => hh > 0);
+  for (let i = 0; i < Math.max(0, r1); i++) ty += G.rowH[i];
+  const trackY = r1 >= 0 ? ty + G.rowH[r1] - 6 : G.headTop + G.SH + 8;
+  for (const { a, st, m } of fronts) {
+    if ((st.kind || "line") === "milestone") continue;
+    const x = X(m);
+    topSvg += `<path d="M${(x - 7).toFixed(1)} ${trackY - 14} L${(x + 7).toFixed(1)} ${trackY - 14} L${x.toFixed(1)} ${trackY - 2}Z" fill="${st.colour || PAPER.ink}" stroke="${PAPER.sheet}" stroke-width="1.2"><title>${esc(a.name)} · ${chFmt(p, m)}</title></path>`;
+  }
+  return { clipY, clipH, grid, top: topSvg, y: yp, count: fronts.length };
+}
+
+// Activities of the main data set under way at time t, with how far along each is (0..1).
+export function activeAt(p, t) {
+  const out = [];
+  for (const a of p.activities) {
+    if (a.dataset !== p.view.main_dataset) continue;
+    const s = tms(a.start), f = tms(a.finish);
+    if (t >= s && t <= f && f > s) out.push({ a, frac: (t - s) / (f - s) });
+  }
+  return out;
 }
 
 function chainageAxis(p, G, y, topSide) {
