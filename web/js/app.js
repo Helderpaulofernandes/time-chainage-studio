@@ -7,6 +7,7 @@ import { DAY, tms, tstr, dstr, niceDate, niceFinish, chFmt, chToM, mToCh, chLabe
 const chAttrs = (p, extra = {}) => (chIsStation(p) ? { type: "text", inputmode: "decimal", placeholder: p.chainage.unit === "ft" ? "12+34.56" : "12+345", ...extra } : { type: "number", step: "any", ...extra });
 const chName = p => (chIsStation(p) ? "station" : `chainage (${p.chainage.unit})`);
 import * as D from "./dialogs.js";
+import { defaultBrand, projectCopy } from "./brand.js";
 import { pageView, printPage, exportPng, renderPage } from "./page.js";
 
 const app = {
@@ -14,7 +15,8 @@ const app = {
   commit() { this.pushUndo(JSON.stringify(this.p)); },
   pushUndo(s) { this.undoS.push(s); if (this.undoS.length > 80) this.undoS.shift(); this.redoS = []; },
   changed(rerender = true) { resetProgress(this.p); this.saveState = "Unsaved changes"; status(); save(); if (rerender) render(); },
-  open(p, fresh = false) { if (play.on) playClose(true); setDateOrder((p.locale || {}).date_order); this.p = p; this.rev = p.rev || 0; this.stale = false; this.file = null; refreshFile(fresh); this.sel = null; this.undoS = []; this.redoS = []; try { localStorage.setItem("tcs-last", p.id); } catch (e) { /* storage blocked */ } this.saveState = "Saved"; render(); },
+  open(p, fresh = false) { if (play.on) playClose(true); setDateOrder((p.locale || {}).date_order); this.p = p;
+    if (fresh && !p.brand) { const db = defaultBrand(); if (db) { p.brand = projectCopy(db); setTimeout(() => this.p === p && this.changed(), 0); } } this.rev = p.rev || 0; this.stale = false; this.file = null; refreshFile(fresh); this.sel = null; this.undoS = []; this.redoS = []; try { localStorage.setItem("tcs-last", p.id); } catch (e) { /* storage blocked */ } this.saveState = "Saved"; render(); },
   load(p) { this.commit(); setDateOrder((p.locale || {}).date_order); this.p = p; this.rev = p.rev || 0; this.sel = null; render(); },
   rev: 0, stale: false, // server revision of the copy this window last read or saved; undo never changes it
   toast,
@@ -72,7 +74,7 @@ const MENU = {
   Insert: [["Activity", "", () => need() && insertAct()], ["Location marker", "", () => need() && insertLoc()], ["Time marker", "", () => need() && insertMk()], ["Section…", "", () => need() && D.projectSetup(app, "edit")], ["Activity style", "", () => need() && insertStyle()], ["Header image…", "", () => need() && D.headerImage(app)]],
   Data: [["Import from P6 (XER) with mapping…", "", () => D.p6Dialog(app, "import")], ["Sync from P6 (XER)…", "", () => need() && D.p6Dialog(app, "sync")], "-",
     ["Data sets (options)", "", () => need() && tab("ds")], ["Productivity library", "", () => need() && D.productivities(app)]],
-  Project: [["Project setup…", "", () => need() && D.projectSetup(app, "edit")], ["Header image…", "", () => need() && D.headerImage(app)], ["Activity styles", "", () => need() && tab("styles")], ["Locations and types", "", () => need() && tab("locs")]],
+  Project: [["Project setup…", "", () => need() && D.projectSetup(app, "edit")], ["Header image…", "", () => need() && D.headerImage(app)], ["Branding…", "", () => need() && D.brandDialog(app)], ["Activity styles", "", () => need() && tab("styles")], ["Locations and types", "", () => need() && tab("locs")]],
   Help: [["Keyboard shortcuts", "", () => shortcuts()], ["Source code on GitHub", "", () => window.open("https://github.com/Helderpaulofernandes/time-chainage-studio", "_blank")]],
 };
 function need() { if (!app.p) { toast("Open or create a project first."); return false; } return true; }
@@ -149,6 +151,7 @@ function render() {
   if (!p) { status(); return; }
   document.title = `${p.name} · Time-Chainage Studio`;
   $("#proj-name").textContent = p.name;
+  const bl = $("#brand-logo"); if (p.brand && p.brand.logo) { bl.src = p.brand.logo; bl.alt = p.brand.name || "Logo"; bl.hidden = false; } else bl.hidden = true;
   // dataset pickers
   const ds = $("#ds-main"), cmp = $("#ds-cmp");
   ds.innerHTML = ""; cmp.innerHTML = "";

@@ -33,6 +33,11 @@ h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; margin-t
 .appbar { display: flex; align-items: center; gap: 18px; padding: 0 12px; border-bottom: 2px solid var(--ink); background: var(--sheet); min-height: 38px; }
 .brand { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
 .brand b { font-size: 15px; }
+.brand-logo { height: 24px; max-width: 140px; object-fit: contain; background: #fff; padding: 2px 5px; border-radius: 3px; margin-left: 6px; }
+.brand-prev { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 4px; margin: 8px 0; min-height: 52px; }
+.brand-prev .plate { background: #fff; border-radius: 3px; padding: 3px 6px; display: inline-flex; }
+.brand-prev .plate img { height: 34px; max-width: 200px; object-fit: contain; }
+.brand-prev .t { display: grid; line-height: 1.2; } .brand-prev .t b { font-size: 16px; } .brand-prev .t small { opacity: .75; }
 #proj-name { color: var(--muted); font-family: var(--f-mono); font-size: 12.5px; margin-left: 6px; }
 #menubar { display: flex; gap: 2px; }
 .menu { position: relative; }

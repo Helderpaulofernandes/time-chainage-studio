@@ -1,6 +1,7 @@
 // Modal dialogs: project setup, open, imports, P6 field mapping and sync, productivities.
 import { api } from "./api.js";
 import { corridorLanes, STAGE_COLOURS } from "./corridor.js";
+import { listBrands, saveBrand, deleteBrand, projectCopy, readLogo, onColour, BRAND_DEFAULTS } from "./brand.js";
 import { h, esc, $, $$, chFmt, chToM, mToCh, uid, tms, niceDate, niceFinish, unitFactor, setDateOrder, chIsStation } from "./util.js";
 
 // ------------------------------------------------------------------ modal framework
@@ -428,6 +429,8 @@ export function videoDialog(app, { t0, t1, mode = "both", header = true, onDone 
         field("Chart shows", sel("vd-win", [["0", "The whole programme"], ["6", "6 weeks, following the date"], ["13", "13 weeks, following the date"], ["26", "26 weeks, following the date"], ["52", "52 weeks, following the date"]], mode === "both" ? "13" : "0"),
           "Following the date keeps the chart readable when the corridor shares the frame.")),
       h("label", { class: "chk" }, h("input", { type: "checkbox", id: "vd-head", checked: header }), " Chart header (sections and locations above the chart)"),
+      h("label", { class: "chk" }, h("input", { type: "checkbox", id: "vd-intro", checked: true }),
+        app.p.brand && app.p.brand.logo ? " Intro and outro: the logo fades in, then the project name, then the chart (adds 7 s)" : " Intro and outro with the project name (adds 7 s). Add a logo under Project → Branding."),
       h("div", { class: "vd-preview" },
         h("img", { id: "vd-prev", alt: "Preview of a video frame" }),
         h("div", { class: "vd-at" }, h("span", {}, "Preview at"), h("input", { type: "range", id: "vd-at", min: 0, max: 1000, step: 1, value: 500, "aria-label": "Preview date" }), h("span", { id: "vd-at-date", class: "pb-date" }))),
@@ -444,7 +447,7 @@ export function videoDialog(app, { t0, t1, mode = "both", header = true, onDone 
         setMsg("Making the video… keep this tab open.");
         try {
           const { exportVideo } = await import("./video.js");
-          const r = await exportVideo(app.p, { t0: a, t1: b, seconds: secs, W, H, mode: val(dlg, "vd-mode"), header: $("#vd-head", dlg).checked, weeks: +val(dlg, "vd-win"), onProgress: f => { prog.value = f; setMsg(`Making the video… ${Math.round(f * 100)}%`); return !cancel; } });
+          const r = await exportVideo(app.p, { t0: a, t1: b, seconds: secs, W, H, mode: val(dlg, "vd-mode"), header: $("#vd-head", dlg).checked, weeks: +val(dlg, "vd-win"), intro: $("#vd-intro", dlg).checked, onProgress: f => { prog.value = f; setMsg(`Making the video… ${Math.round(f * 100)}%`); return !cancel; } });
           if (!r) { setMsg("Cancelled."); return; }
           onDone(r);
           setMsg(`Saved a ${(r.blob.size / 1e6).toFixed(1)} MB ${r.ext.toUpperCase()} video.`, "ok");
@@ -457,6 +460,69 @@ export function videoDialog(app, { t0, t1, mode = "both", header = true, onDone 
   D0.addEventListener("input", e => { if (e.target.closest(".vd-preview, .row2, label")) later(); });
   D0.addEventListener("change", later);
   preview();
+}
+
+// ------------------------------------------------------------------ branding
+// Brands live in this browser's library; the project keeps a copy so its files carry the logo.
+export function brandDialog(app) {
+  const p = app.p;
+  const work = listBrands().map(b => ({ ...b })), removed = new Set();
+  if (p.brand && !work.some(b => b.id === p.brand.id)) work.push({ ...p.brand, id: p.brand.id || uid("br_"), _fromProject: true });
+  let cur = p.brand ? (work.find(b => b.id === p.brand.id) || work[work.length - 1]).id : "";
+  const pick = h("select", { id: "bd-pick" }), editor = h("div", { class: "brand-ed" });
+  const fillPick = () => {
+    pick.innerHTML = "";
+    pick.append(h("option", { value: "" }, "No branding"));
+    work.forEach(b => pick.append(h("option", { value: b.id }, (b.name || "Unnamed brand") + (b._fromProject ? " (came with this project)" : "") + (b.is_default ? " · default" : ""))));
+    pick.value = cur;
+  };
+  const curB = () => work.find(b => b.id === cur);
+  const preview = () => {
+    const b = curB(), box = $("#bd-prev", editor); if (!box || !b) return;
+    const bg = b.colour || "#18262B";
+    box.innerHTML = "";
+    box.style.background = bg; box.style.color = onColour(bg);
+    if (b.logo) box.append(h("span", { class: "plate" }, h("img", { src: b.logo, alt: "Logo" })));
+    box.append(h("span", { class: "t" }, h("b", {}, p.meta.title || p.name), h("small", {}, b.name || "")));
+  };
+  const drawEditor = () => {
+    editor.innerHTML = "";
+    const b = curB();
+    if (!b) { editor.append(h("p", { class: "hint" }, "This project is not branded. Choose a brand above, or make a new one.")); return; }
+    const upd = (k, v) => { b[k] = v; preview(); if (k === "name") fillPick(); };
+    editor.append(
+      h("div", { class: "row2" },
+        field("Company name", h("input", { value: b.name || "", oninput: e => upd("name", e.target.value), onchange: () => fillPick() })),
+        field("Logo", h("input", { type: "file", accept: "image/png,image/jpeg,image/gif,image/webp,image/svg+xml",
+          onchange: async e => { try { Object.assign(b, await readLogo(e.target.files[0])); preview(); } catch (err) { app.toast(err.message); } } }),
+          "PNG with a transparent background, or SVG, works best.")),
+      h("div", { class: "row2" },
+        field("Brand colour (title strip, intro text)", h("input", { type: "color", value: b.colour || BRAND_DEFAULTS.colour, oninput: e => upd("colour", e.target.value) })),
+        field("Accent colour", h("input", { type: "color", value: b.accent || BRAND_DEFAULTS.accent, oninput: e => upd("accent", e.target.value) }))),
+      h("div", { id: "bd-prev", class: "brand-prev" }),
+      h("label", { class: "chk" }, h("input", { type: "checkbox", checked: !!b.is_default, onchange: e => { work.forEach(x => (x.is_default = false)); b.is_default = e.target.checked; fillPick(); } }),
+        " Use this brand for new and imported projects"),
+      h("div", { class: "btns" },
+        b.logo ? h("button", { type: "button", onclick: () => { b.logo = null; b.logo_w = b.logo_h = 0; drawEditor(); } }, "Remove logo") : null,
+        h("button", { type: "button", class: "danger", onclick: () => { removed.add(b.id); work.splice(work.indexOf(b), 1); cur = ""; fillPick(); drawEditor(); } }, "Delete brand")));
+    preview();
+  };
+  pick.onchange = () => { cur = pick.value; drawEditor(); };
+  fillPick();
+  modal({
+    title: "Branding", wide: true,
+    body: el => { el.append(
+      h("p", { class: "hint" }, "Your brands are kept in this browser, so you can switch a project between them at any time. The project keeps a copy of its brand, so the logo travels with the project file. The brand is used in the app bar, the page layout title block, image blocks set to the brand logo, and video titles, intro and outro."),
+      h("div", { class: "row2" }, field("Brand for this project", pick),
+        h("div", { class: "btns", style: "align-self:end" }, h("button", { type: "button", onclick: () => { const b = { ...BRAND_DEFAULTS, id: uid("br_"), name: "New brand" }; work.push(b); cur = b.id; fillPick(); drawEditor(); } }, "New brand…"))),
+      editor); drawEditor(); },
+    buttons: [{ label: "Cancel" }, { label: "Apply", primary: true, onClick: ({ close }) => {
+      removed.forEach(id => deleteBrand(id));
+      let chosen = null;
+      for (const b of work) { const { _fromProject, ...rec } = b; const saved = saveBrand(rec); if (b.id === cur) chosen = saved; }
+      app.commit(); p.brand = projectCopy(chosen); app.changed(); close();
+    } }],
+  });
 }
 
 // ------------------------------------------------------------------ corridor view settings

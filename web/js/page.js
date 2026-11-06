@@ -2,6 +2,7 @@
 import { renderChart, renderLegend, PAPER } from "./render.js";
 import { esc, h, $, $$, download, niceDate, tms, clamp, uid } from "./util.js";
 import { readImage } from "./dialogs.js";
+import { logoSvg, logoWidth } from "./brand.js";
 
 export const PAPERS = { A4: [297, 210], A3: [420, 297], A2: [594, 420], A1: [841, 594], A0: [1189, 841], Letter: [279, 216], Ledger: [432, 279], "ANSI D": [864, 559] };
 const UNITS_PER_MM = 3.5; // drawing units per millimetre inside placed blocks (sets text size on paper)
@@ -15,7 +16,7 @@ export function paperSize(pg) {
 function fillText(t, p) {
   const m = p.meta || {};
   return String(t || "").replace(/\{(\w+)\}/g, (x, k) => ({ title: m.title || p.name, subtitle: m.subtitle, client: m.client, contract: m.contract, revision: m.revision,
-    author: m.author, date: niceDate(Date.now()), project: p.name, dataset: (p.datasets.find(d => d.id === p.view.main_dataset) || {}).name }[k] ?? x));
+    author: m.author, date: niceDate(Date.now()), project: p.name, company: (p.brand && p.brand.name) || "", dataset: (p.datasets.find(d => d.id === p.view.main_dataset) || {}).name }[k] ?? x));
 }
 
 // Full page as SVG in millimetres.
@@ -36,15 +37,21 @@ export function renderPage(p, { selected = null, forPrint = false } = {}) {
       const lg = renderLegend(p, { width: iw, size: b.font_size || 11 });
       const sc = Math.min(1, (ih - 16) / Math.max(1, lg.height));
       o += `<svg x="${x + 2}" y="${y + 2}" width="${w - 4}" height="${hh - 4}" viewBox="0 0 ${(iw - 16) / sc} ${(ih - 16) / sc}">${lg.svg}</svg>`;
+    } else if (b.kind === "image" && b.brand_logo) {
+      if (p.brand && p.brand.logo) o += logoSvg(p.brand, x + 1, y + 1, w - 2, hh - 2, "center");
+      else if (!forPrint) o += `<text x="${x + w / 2}" y="${y + hh / 2}" font-size="3" text-anchor="middle" fill="#9AA5A8">No brand logo yet: Project → Branding</text>`;
     } else if (b.kind === "image") {
       if (b.data) o += `<image href="${b.data}" x="${x + 1}" y="${y + 1}" width="${w - 2}" height="${hh - 2}" preserveAspectRatio="xMidYMid meet"/>`;
       else if (!forPrint) o += `<text x="${x + w / 2}" y="${y + hh / 2}" font-size="3" text-anchor="middle" fill="#9AA5A8">Choose an image in the panel</text>`;
     } else if (b.kind === "titleblock") {
       const m = p.meta, cells = [["Project", m.title || p.name], ["Client", m.client], ["Contract", m.contract], ["Option", (p.datasets.find(d => d.id === p.view.main_dataset) || {}).name],
         ["Revision", m.revision], ["Prepared by", m.author], ["Date", niceDate(Date.now())], ["Sheet", `${pg.paper} ${pg.orientation}`]];
-      const cols = 2, rows = Math.ceil(cells.length / cols), cw = w / cols, rh = hh / rows;
+      // the brand logo takes a cell on the left of the title block
+      const lw = p.brand && p.brand.logo ? Math.min(w * 0.3, logoWidth(p.brand, hh - 3) + 3) : 0;
+      if (lw) { o += `<rect x="${x}" y="${y}" width="${lw}" height="${hh}" fill="#fff" stroke="#18262B" stroke-width=".2"/>` + logoSvg(p.brand, x + 1.5, y + 1.5, lw - 3, hh - 3, "center"); }
+      const cols = 2, rows = Math.ceil(cells.length / cols), cw = (w - lw) / cols, rh = hh / rows;
       cells.forEach(([k, v], i) => {
-        const cx = x + (i % cols) * cw, cy = y + Math.floor(i / cols) * rh;
+        const cx = x + lw + (i % cols) * cw, cy = y + Math.floor(i / cols) * rh;
         o += `<rect x="${cx}" y="${cy}" width="${cw}" height="${rh}" fill="none" stroke="#18262B" stroke-width=".2"/>`;
         o += `<text x="${cx + 1.2}" y="${cy + Math.min(2.6, rh * .35)}" font-size="${Math.min(1.9, rh * .28)}" fill="#5D6B70" letter-spacing=".1">${esc(k.toUpperCase())}</text>`;
         o += `<text x="${cx + 1.2}" y="${cy + rh - Math.min(1.4, rh * .2)}" font-size="${Math.min(3.4, rh * .45)}" fill="#18262B">${esc(clip(v || "", cw / (Math.min(3.4, rh * .45) * .5)))}</text>`;
@@ -180,7 +187,8 @@ export function pageView(app) {
           : b.shrink && L.shrunkPt < (b.font_size || 12) ? `Text shrunk to ${L.shrunkPt} pt to fit.` : "Text wraps to the block width. Start a new line with Enter."));
       }
       if (b.kind === "legend") panel.append(lbl("Text size", numEl(b.font_size || 11, v => upd("font_size", v))));
-      if (b.kind === "image") panel.append(lbl("Image (logo, key plan…)", h("input", { type: "file", accept: "image/png,image/jpeg,image/gif,image/webp,image/svg+xml",
+      if (b.kind === "image") panel.append(h("label", { class: "chk" }, h("input", { type: "checkbox", checked: !!b.brand_logo, onchange: e => upd("brand_logo", e.target.checked) }), " Use the project's brand logo (changes with the branding)"));
+      if (b.kind === "image" && !b.brand_logo) panel.append(lbl("Image (logo, key plan…)", h("input", { type: "file", accept: "image/png,image/jpeg,image/gif,image/webp,image/svg+xml",
         onchange: async e => { try { const im = await readImage(e.target.files[0]); upd("data", im.data); } catch (err) { app.toast(err.message); } } })));
       panel.append(h("div", { class: "btns" }, h("button", { type: "button", class: "danger", onclick: () => { app.commit(); pg.blocks = pg.blocks.filter(x => x !== b); sel = null; app.changed(false); draw(); } }, "Delete block")));
     }

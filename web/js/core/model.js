@@ -74,7 +74,7 @@ export function newProject(name = "Untitled", discipline = "rail", chStart = 0, 
     datasets: [{ id: ds, name: "Main", source: "manual" }],
     view: { main_dataset: ds, compare_dataset: null, show_footprints: true, show_labels: true, show_time_markers: true, show_location_grid: true,
       pause_on_shutdowns: false, corridor: corridorDefaults() },
-    sections: [], locations: [], time_markers: [], activities: [], productivities: [], page: { ...defaultPage(), paper: unit === "ft" || unit === "mi" ? "Ledger" : "A3" }, p6: null, header_image: null,
+    sections: [], locations: [], time_markers: [], activities: [], productivities: [], page: { ...defaultPage(), paper: unit === "ft" || unit === "mi" ? "Ledger" : "A3" }, p6: null, header_image: null, brand: null,
   };
 }
 

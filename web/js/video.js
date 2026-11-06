@@ -2,6 +2,7 @@
 // MP4 uses the browser's WebCodecs encoder and mp4-muxer (loaded only when needed); WebM via MediaRecorder is the fallback.
 import { renderChart, renderLegend, activeAt, geometry } from "./render.js";
 import { renderCorridor } from "./corridor.js";
+import { logoSvg, logoWidth, onColour } from "./brand.js";
 import { niceDate, esc, DAY, DOW } from "./util.js";
 
 const FONT = "IBM Plex Sans Condensed, Arial Narrow, Arial, sans-serif";
@@ -70,16 +71,47 @@ export function frameSvg(p, t, W, H, { mode = "chart", phase = 0, header = true,
   const lg = renderLegend(p, { size: 11 });
   const lgScale = Math.min(1, (H - head - pad * 2) / Math.max(1, lg.height));
   const ts = Math.round(head * 0.36), ss = Math.round(head * 0.2);
+  const br = p.brand, bg = (br && br.colour) || "#18262B", fg = onColour(bg), fg2 = fg === "#FFFFFF" ? "#C9D2D2" : "#5D6B70";
+  const lh = head - pad, lw = logoWidth(br, lh - 8, W * 0.16);
+  const logo = lw ? `<rect x="${pad}" y="${pad / 2}" width="${lw + 12}" height="${lh}" rx="3" fill="#fff"/>` + logoSvg(br, pad + 6, pad / 2 + 4, lw, lh - 8) : "";
+  const tx = lw ? pad * 2 + lw + 16 : pad * 2;
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="${FONT}">
     <rect width="${W}" height="${H}" fill="#fff"/>
-    <rect width="${W}" height="${head}" fill="#18262B"/>
-    <text x="${pad * 2}" y="${head * 0.48}" font-size="${ts}" font-weight="700" fill="#fff">${esc(p.meta.title || p.name)}</text>
-    <text x="${pad * 2}" y="${head * 0.82}" font-size="${ss}" fill="#C9D2D2">${esc(ds)}</text>
-    <text x="${W - pad * 2}" y="${head * 0.5}" font-size="${ts}" font-weight="700" fill="#fff" text-anchor="end">${esc(DOW[d.getUTCDay()] + " " + niceDate(t))}</text>
-    <text x="${W - pad * 2}" y="${head * 0.82}" font-size="${ss}" fill="#C9D2D2" text-anchor="end">${n ? `${n} activit${n === 1 ? "y" : "ies"} under way` : "nothing under way"}</text>
+    <rect width="${W}" height="${head}" fill="${bg}"/>${logo}
+    <text x="${tx}" y="${head * 0.48}" font-size="${ts}" font-weight="700" fill="${fg}">${esc(p.meta.title || p.name)}</text>
+    <text x="${tx}" y="${head * 0.82}" font-size="${ss}" fill="${fg2}">${esc(ds)}</text>
+    <text x="${W - pad * 2}" y="${head * 0.5}" font-size="${ts}" font-weight="700" fill="${fg}" text-anchor="end">${esc(DOW[d.getUTCDay()] + " " + niceDate(t))}</text>
+    <text x="${W - pad * 2}" y="${head * 0.82}" font-size="${ss}" fill="${fg2}" text-anchor="end">${n ? `${n} activit${n === 1 ? "y" : "ies"} under way` : "nothing under way"}</text>
     ${cor}${chartSvg}
     <g transform="translate(${W - legendW - pad} ${head + pad}) scale(${lgScale})">${lg.svg}</g>
   </svg>`;
+}
+
+// Decode an SVG string into an image that can be drawn (with any opacity) many times.
+async function svgImage(svg) {
+  const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
+  try { const img = new Image(); img.src = url; await img.decode(); return img; } finally { URL.revokeObjectURL(url); }
+}
+
+// Intro / outro card, in two layers so they can fade separately: the logo, and the project name with its details.
+export function cardSvg(p, W, H, layer) {
+  const br = p.brand, col = (br && br.colour) || "#18262B", m = p.meta || {};
+  const ds = (p.datasets.find(d => d.id === p.view.main_dataset) || {}).name || "";
+  const hasLogo = !!(br && br.logo);
+  let o = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="${FONT}">`;
+  if (layer === "logo") {
+    if (hasLogo) o += logoSvg(br, W * 0.3, H * 0.16, W * 0.4, H * 0.34, "center");
+    else if (br && br.name) o += `<text x="${W / 2}" y="${H * 0.36}" text-anchor="middle" font-size="${Math.round(H * 0.06)}" font-weight="700" letter-spacing="2" fill="${col}">${esc(br.name.toUpperCase())}</text>`;
+  } else {
+    const y = hasLogo || (br && br.name) ? H * 0.6 : H * 0.46, big = Math.round(H * 0.062), mid = Math.round(H * 0.03), sm = Math.round(H * 0.022);
+    o += `<rect x="${W * 0.42}" y="${y - big * 1.45}" width="${W * 0.16}" height="${Math.max(2, H * 0.004)}" fill="${(br && br.accent) || "#C00000"}"/>`;
+    o += `<text x="${W / 2}" y="${y}" text-anchor="middle" font-size="${big}" font-weight="700" fill="${col}">${esc(m.title || p.name)}</text>`;
+    const sub = [m.subtitle, ds].filter(Boolean).join(" · ");
+    if (sub) o += `<text x="${W / 2}" y="${y + mid * 1.7}" text-anchor="middle" font-size="${mid}" fill="#5D6B70">${esc(sub)}</text>`;
+    const foot = ["Time–chainage programme", m.client, m.contract].filter(Boolean).join(" · ");
+    o += `<text x="${W / 2}" y="${y + mid * 1.7 + sm * 2.2}" text-anchor="middle" font-size="${sm}" letter-spacing="1" fill="#5D6B70">${esc(foot.toUpperCase())}</text>`;
+  }
+  return o + "</svg>";
 }
 
 async function drawSvg(ctx, svg, W, H) {
@@ -99,12 +131,40 @@ export async function exportFrame(p, t, W = 1920, H = 1080, opts = {}) {
 }
 
 // Encode the playback from t0 to t1 into a video of `seconds` length. onProgress(0..1); return false from it to cancel.
-export async function exportVideo(p, { t0, t1, seconds = 20, fps = 30, W = 1920, H = 1080, hold = 2, mode = "chart", header = true, weeks = defaultWeeks(mode), onProgress = () => true }) {
-  const svgAt = i => frameSvg(p, tAt(i), W, H, { mode, header, weeks, phase: (i / fps) % 1 });
-  const frames = Math.max(2, Math.round(seconds * fps)), extra = Math.round(hold * fps);
+// With intro on: the logo fades in, then the project name, then the card crossfades into the time-chainage.
+// The outro crossfades back to the card and fades it out to white.
+export async function exportVideo(p, { t0, t1, seconds = 20, fps = 30, W = 1920, H = 1080, hold = 2, mode = "chart", header = true, weeks = defaultWeeks(mode), intro = true, onProgress = () => true }) {
+  const frames = Math.max(2, Math.round(seconds * fps)), extra = Math.round((intro ? 1 : hold) * fps);
+  const IN = intro ? 4 : 0, OUT = intro ? 3 : 0, nIn = Math.round(IN * fps), nOut = Math.round(OUT * fps);
+  const total = nIn + frames + extra + nOut;
   const cv = Object.assign(document.createElement("canvas"), { width: W, height: H });
   const ctx = cv.getContext("2d");
   const tAt = i => t0 + (t1 - t0) * Math.min(1, i / (frames - 1));
+  const svgAt = i => frameSvg(p, tAt(i), W, H, { mode, header, weeks, phase: (i / fps) % 1 });
+  let card = null, first = null, last = null;
+  if (intro) [card, first, last] = await Promise.all([
+    Promise.all([svgImage(cardSvg(p, W, H, "logo")), svgImage(cardSvg(p, W, H, "text"))]), svgImage(svgAt(0)), svgImage(svgAt(frames - 1))]);
+  const ramp = (x, a, b) => Math.max(0, Math.min(1, (x - a) / (b - a)));
+  const ease = x => x * x * (3 - 2 * x);
+  const layer = (img, a) => { if (a > 0.001) { ctx.globalAlpha = a; ctx.drawImage(img, 0, 0, W, H); } };
+  async function draw(i) {
+    ctx.globalAlpha = 1; ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, W, H);
+    if (i < nIn) {
+      const k = i / fps, x = ease(ramp(k, IN - 0.8, IN));          // crossfade into the chart over the last 0.8 s
+      layer(first, x);
+      layer(card[0], ease(ramp(k, 0.2, 1.2)) * (1 - x));            // logo fades in
+      layer(card[1], ease(ramp(k, 1.4, 2.2)) * (1 - x));            // then the project name
+    } else if (i < nIn + frames + extra) {
+      const j = Math.min(i - nIn, frames - 1);
+      const svg = svgAt(j); ctx.globalAlpha = 1;
+      const img = await svgImage(svg); ctx.drawImage(img, 0, 0, W, H);
+    } else {
+      const k = (i - nIn - frames - extra) / fps, x = ease(ramp(k, 0, 0.8)), out = 1 - ease(ramp(k, OUT - 1, OUT));
+      layer(last, 1 - x);
+      layer(card[0], x * out); layer(card[1], x * out);
+    }
+    ctx.globalAlpha = 1;
+  }
   const useWebCodecs = typeof VideoEncoder !== "undefined";
   if (useWebCodecs) {
     await loadScript(MUXER_URL);
@@ -115,13 +175,13 @@ export async function exportVideo(p, { t0, t1, seconds = 20, fps = 30, W = 1920,
     let fail = null;
     const enc = new VideoEncoder({ output: (chunk, meta) => muxer.addVideoChunk(chunk, meta), error: e => (fail = e) });
     enc.configure(cfg);
-    for (let i = 0; i < frames + extra; i++) {
+    for (let i = 0; i < total; i++) {
       if (fail) throw fail;
-      await drawSvg(ctx, svgAt(i), W, H);
+      await draw(i);
       const vf = new VideoFrame(cv, { timestamp: Math.round((i * 1e6) / fps), duration: Math.round(1e6 / fps) });
       enc.encode(vf, { keyFrame: i % (fps * 2) === 0 }); vf.close();
       while (enc.encodeQueueSize > 8) await new Promise(r => setTimeout(r, 5));
-      if (onProgress(i / (frames + extra)) === false) { enc.close(); return null; }
+      if (onProgress(i / total) === false) { enc.close(); return null; }
     }
     await enc.flush(); muxer.finalize();
     return { blob: new Blob([muxer.target.buffer], { type: "video/mp4" }), ext: "mp4" };
@@ -134,12 +194,12 @@ export async function exportVideo(p, { t0, t1, seconds = 20, fps = 30, W = 1920,
   const done = new Promise(r => (rec.onstop = r));
   rec.start();
   const start = performance.now();
-  for (let i = 0; i < frames + extra; i++) {
-    await drawSvg(ctx, svgAt(i), W, H);
+  for (let i = 0; i < total; i++) {
+    await draw(i);
     track.requestFrame();
     const wait = start + (i + 1) * (1000 / fps) - performance.now();
     if (wait > 0) await new Promise(r => setTimeout(r, wait));
-    if (onProgress(i / (frames + extra)) === false) { rec.stop(); return null; }
+    if (onProgress(i / total) === false) { rec.stop(); return null; }
   }
   rec.stop(); await done;
   return { blob: new Blob(chunks, { type: "video/webm" }), ext: "webm" };
