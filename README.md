@@ -30,7 +30,7 @@ Then open http://localhost:8765. The Python server in `server/` also offers the 
 |---|---|
 | New project dialog (rail / road / tunnel presets), project setup from the Project menu | done |
 | Ranges: chainage (m or km, prefix, ticks, reverse, snap) and time (scale, up/down, week labels) | done |
-| Activities: line, wide bar, block, milestone; drag to move, drag ends, draw new | done |
+| Activities: line, wide bar, block, cut (descending triangle), fill (ascending triangle), milestone; drag to move, drag ends, draw new | done |
 | Labels per style or per activity, with a template, following the slope of the line | done |
 | Footprint polygons: length behind the work front and/or days occupied after it passes | done |
 | Productivity: quantity and rate per activity, set finish from rate, productivity library | done |
