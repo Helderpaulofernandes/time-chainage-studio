@@ -32,6 +32,8 @@ Then open http://localhost:8765. The Python server in `server/` also offers the 
 | Ranges: chainage (m or km, prefix, ticks, reverse, snap) and time (scale, up/down, week labels) | done |
 | Activities: line, wide bar, block, cut (right-angle triangle ◣), fill (right-angle triangle ◢), milestone; drag to move, drag ends, draw new | done |
 | Labels per style or per activity, with a template, following the slope of the line | done |
+| Line marks (ticks, arrows, V marks, crosses, dots, triangles), area fills (hatched, cross-hatched, dotted, outline), upright labels on narrow blocks | done |
+| Logic links read from the P6 XER and drawn as arrows between activities (View → Logic links) | done |
 | Footprint polygons: length behind the work front and/or days occupied after it passes | done |
 | Productivity: quantity and rate per activity, set finish from rate, productivity library | done |
 | Location markers (typed, symbols, rows, ranges, grid lines) and section markers | done |
@@ -48,6 +50,7 @@ Then open http://localhost:8765. The Python server in `server/` also offers the 
 | Corridor view: during playback, crews move along lanes by chainage above the chart, the track line fills in by stage, crews pause on stand-downs (optional), and video export can include it | done |
 | Branding: a library of company brands (logo, name, colours) kept in the browser; each project keeps a copy, used in the app bar, page title block, logo image blocks, video title strip and a logo / project-name intro and outro with fades | done |
 | Video intro / outro settings (on/off, length, background, title, subtitle, closing line) and music (any audio file, volume, fades, start point, loops to length; AAC in the MP4) | done |
+| Improvement roadmap from a review of real tender diagrams: [docs/ROADMAP.md](docs/ROADMAP.md) | |
 | Live P6 connection (EPPM web services, Primavera Cloud REST, P6 Pro database) | next phase |
 
 ## Units (metric and US)

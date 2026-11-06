@@ -1,6 +1,6 @@
 // Time-Chainage Studio front end: menus, chart interaction, side panels, undo and autosave.
 import { api } from "./api.js";
-import { renderChart, renderLegend, geometry, styleMap, activeAt, playDynamic, resetProgress } from "./render.js";
+import { renderChart, renderLegend, geometry, styleMap, activeAt, playDynamic, resetProgress, MARKS, FILLS } from "./render.js";
 import { renderCorridor, corridorDynamic, corridorCfg } from "./corridor.js";
 import { DAY, tms, tstr, dstr, niceDate, niceFinish, chFmt, chToM, mToCh, chLabel, chIsStation, lenUnit, lenFromM, setDateOrder, esc, $, $$, h, uid, clamp, download, debounce, DOW } from "./util.js";
 // chainage inputs: text boxes on station projects ("12+34.56"), number boxes otherwise
@@ -70,6 +70,7 @@ const MENU = {
     ["Zoom time in", "Ctrl+=", () => zoomT(1.25)], ["Zoom time out", "Ctrl+-", () => zoomT(0.8)], ["Fit time to window", "", () => fitTime()],
     ["Zoom chainage in", "Ctrl+Shift+wheel", () => zoomX(1.5)], ["Zoom chainage out", "", () => zoomX(1 / 1.5)], ["Fit chainage", "", () => { app.xZoom = 1; render(); }], "-",
     ["Labels", "", () => toggle("show_labels"), () => app.p?.view.show_labels !== false], ["Footprints", "", () => toggle("show_footprints"), () => app.p?.view.show_footprints !== false],
+    ["Logic links (from P6)", "", () => { app.p.view.show_links = !app.p.view.show_links; app.changed(); }, () => !!app.p?.view.show_links],
     ["Time markers", "", () => toggle("show_time_markers"), () => app.p?.view.show_time_markers !== false], ["Location grid", "", () => toggle("show_location_grid"), () => app.p?.view.show_location_grid !== false]],
   Insert: [["Activity", "", () => need() && insertAct()], ["Location marker", "", () => need() && insertLoc()], ["Time marker", "", () => need() && insertMk()], ["Section…", "", () => need() && D.projectSetup(app, "edit")], ["Activity style", "", () => need() && insertStyle()], ["Header image…", "", () => need() && D.headerImage(app)]],
   Data: [["Import from P6 (XER) with mapping…", "", () => D.p6Dialog(app, "import")], ["Sync from P6 (XER)…", "", () => need() && D.p6Dialog(app, "sync")], "-",
@@ -478,6 +479,8 @@ function styleProps(box, s) {
       F("Drawn as", S([["line", "Line (linear progress)"], ["bar", "Wide bar along the line"], ["block", "Block (area / static)"], ["cut", "Cut (right-angle triangle ◣, falling)"], ["fill", "Fill (right-angle triangle ◢, rising)"], ["milestone", "Milestone"]], s.kind, edit(s, "kind"))),
       F("Colour", I(s.colour, edit(s, "colour"), { type: "color" })), F("Line width", I(s.width, edit(s, "width", num), { type: "number", step: "0.5", min: 0.5 })),
       F("Line type", S([["solid", "Solid"], ["dash", "Dashed"], ["dot", "Dotted"]], s.dash, edit(s, "dash"))), F("Fill opacity", I(s.fill_opacity, edit(s, "fill_opacity", num), { type: "number", step: "0.05", min: 0, max: 1 })),
+      F("Marks along the line", S(MARKS, s.marks || "none", edit(s, "marks"))), F("Mark spacing (px)", I(s.mark_spacing || 22, edit(s, "mark_spacing", num), { type: "number", step: "1", min: 6 })),
+      F("Area fill (block, cut, fill)", S(FILLS, s.fill_pattern || "solid", edit(s, "fill_pattern"))), h("span"),
       C(s.legend !== false, edit(s, "legend"), "Show in legend")),
     h("h3", {}, "Label"), h("div", { class: "fgrid" }, h("div", { class: "full" }, F("Text", I(s.label.text, v => setL("text", v)), "{name} {code} {rate} {rate_unit} {qty} {dur} {start} {finish} {ch0} {ch1}")),
       F("Position", S([["start", "Start"], ["mid", "Middle"], ["end", "End"]], s.label.position, v => setL("position", v))), F("Side", S([["above", "Above"], ["below", "Below"]], s.label.side, v => setL("side", v))),

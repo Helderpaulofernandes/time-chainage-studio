@@ -126,6 +126,12 @@ export function applyMapping(x, m, project, datasetId) {
       p6: { task_id: t.task_id, proj_id: t.proj_id, task_code: t.task_code || "", task_type: tt, status: t.status_code || "", guid: t.guid || "",
         total_float_days: isNaN(tf) ? null : Math.round(tf / 8 * 10) / 10, driving: t.driving_path_flag === "Y" } }));
   }
+  // logic links (TASKPRED) between imported activities, kept by Activity ID so a sync keeps them right
+  const byTask = new Map(acts.map(a => [a.p6.task_id, a]));
+  for (const r of rows(x, "TASKPRED")) {
+    const a = byTask.get(r.task_id), b = byTask.get(r.pred_task_id); if (!a || !b) continue;
+    (a.links ||= []).push({ code: b.code, type: String(r.pred_type || "PR_FS").replace("PR_", ""), lag_days: Math.round((parseFloat(r.lag_hr_cnt) || 0) / 8 * 10) / 10 });
+  }
   return { activities: acts, new_styles: newStyles, skipped };
 }
 

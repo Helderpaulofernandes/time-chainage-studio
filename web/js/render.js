@@ -3,7 +3,7 @@
 import { DAY, MON, tms, esc, chFmt, chUnitLabel, lenFmt, isoWeek, labelText, niceDate, niceFinish } from "./util.js";
 
 export const PAPER = { ink: "#18262B", muted: "#5D6B70", rule: "#C9D2D2", faint: "#EEF2F1", band: "#EDF2F1", band2: "#E2EAE8",
-  sheet: "#FFFFFF", ghost: "#9AA5A8", hatch: "#9AA7AA", sel: "#E0A400" };
+  sheet: "#FFFFFF", ghost: "#9AA5A8", hatch: "#9AA7AA", sel: "#E0A400", link: "#C00000" };
 const FONT = "IBM Plex Sans Condensed, Arial Narrow, Arial, sans-serif";
 const MONO = "IBM Plex Mono, Consolas, monospace";
 
@@ -74,6 +74,42 @@ export function locSymbol(symbol, x, a, b, base, col) {
 const T = (x, y, s, attrs = "", style = "") => `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" ${attrs} style="${style}">${esc(s)}</text>`;
 const halo = `paint-order="stroke" stroke="${PAPER.sheet}" stroke-width="3" stroke-linejoin="round"`;
 const dashOf = d => (d === "dash" ? 'stroke-dasharray="10 6"' : d === "dot" ? 'stroke-dasharray="2 4"' : "");
+
+// ---- line marks: symbols repeated along a line, so styles can be told apart in black and white
+export const MARKS = [["none", "None"], ["tick", "Ticks"], ["arrow", "Arrows (direction of work)"], ["chevron", "V marks"], ["cross", "Crosses"], ["dot", "Dots"], ["flag", "Triangles"]];
+export function marksSvg(kind, x0, y0, x1, y1, col, width = 2, spacing = 22, extra = "") {
+  if (!kind || kind === "none") return "";
+  const dx = x1 - x0, dy = y1 - y0, len = Math.hypot(dx, dy); if (len < 6) return "";
+  const ux = dx / len, uy = dy / len; let nx = -uy, ny = ux;
+  if (ny > 0 || (ny === 0 && nx < 0)) { nx = -nx; ny = -ny; } // marks stand on the upper side of the line
+  const s = 3 + Math.min(4, width), n = Math.max(1, Math.floor(len / Math.max(6, spacing))), step = len / n, P = (x, y) => `${x.toFixed(1)} ${y.toFixed(1)}`;
+  let d = "", f = "";
+  for (let i = 0; i < n; i++) {
+    const t = step * (i + 0.5), x = x0 + ux * t, y = y0 + uy * t;
+    if (kind === "tick") d += `M${P(x, y)}L${P(x + nx * s, y + ny * s)}`;
+    else if (kind === "arrow") d += `M${P(x - ux * s + nx * s * 0.6, y - uy * s + ny * s * 0.6)}L${P(x, y)}L${P(x - ux * s - nx * s * 0.6, y - uy * s - ny * s * 0.6)}`;
+    else if (kind === "chevron") d += `M${P(x - ux * s * 0.6 + nx * s, y - uy * s * 0.6 + ny * s)}L${P(x, y)}L${P(x + ux * s * 0.6 + nx * s, y + uy * s * 0.6 + ny * s)}`;
+    else if (kind === "cross") { const a = s * 0.6; d += `M${P(x - (ux + nx) * a, y - (uy + ny) * a)}L${P(x + (ux + nx) * a, y + (uy + ny) * a)}M${P(x - (ux - nx) * a, y - (uy - ny) * a)}L${P(x + (ux - nx) * a, y + (uy - ny) * a)}`; }
+    else if (kind === "dot") { const r = s * 0.45; f += `M${P(x - r, y)}a${r.toFixed(1)} ${r.toFixed(1)} 0 1 0 ${(2 * r).toFixed(1)} 0a${r.toFixed(1)} ${r.toFixed(1)} 0 1 0 ${(-2 * r).toFixed(1)} 0`; }
+    else if (kind === "flag") f += `M${P(x - ux * s * 0.5, y - uy * s * 0.5)}L${P(x + nx * s * 1.2, y + ny * s * 1.2)}L${P(x + ux * s * 0.5, y + uy * s * 0.5)}Z`;
+  }
+  return (d ? `<path d="${d}" fill="none" stroke="${col}" stroke-width="${Math.max(1, Math.min(2, width * 0.5))}" stroke-linecap="round" stroke-linejoin="round" ${extra}/>` : "") + (f ? `<path d="${f}" fill="${col}" ${extra}/>` : "");
+}
+
+// ---- area fills for blocks, cut and fill: solid, hatched, cross-hatched, dotted or outline only
+export const FILLS = [["solid", "Solid"], ["hatch", "Hatched"], ["crosshatch", "Cross-hatched"], ["dots", "Dotted"], ["none", "Outline only"]];
+export function areaPaint(st, col, defs) {
+  const pat = st.fill_pattern || "solid", op = st.fill_opacity ?? 0.35;
+  if (pat === "none") return `fill="${col}" fill-opacity="0"`;
+  if (pat === "solid" || !defs) return `fill="${col}" fill-opacity="${op}"`;
+  const id = `fp-${pat}-${String(col).replace(/[^0-9a-z]/gi, "")}-${Math.round(op * 100)}`;
+  if (!defs.has(id)) {
+    const ln = `stroke="${col}" stroke-width="1.2"`;
+    const inner = pat === "hatch" ? `<path d="M4 0V8" ${ln}/>` : pat === "crosshatch" ? `<path d="M4 0V8M0 4H8" ${ln}/>` : `<circle cx="4" cy="4" r="1.3" fill="${col}"/>`;
+    defs.set(id, `<pattern id="${id}" width="8" height="8" patternUnits="userSpaceOnUse"${pat === "dots" ? "" : ' patternTransform="rotate(45)"'}><rect width="8" height="8" fill="${col}" fill-opacity="${(op * 0.5).toFixed(2)}"/>${inner}</pattern>`);
+  }
+  return `fill="url(#${id})"`;
+}
 
 // ------------------------------------------------------------------ main chart
 export function renderChart(p, opts = {}) {
@@ -206,7 +242,7 @@ export function renderChart(p, opts = {}) {
     const pts = [[a.ch0_m, s], [a.ch1_m, f], [a.ch1_m - dir * len, f + lag], [a.ch0_m - dir * len, s + lag]];
     o += `<polygon data-act="${a.id}" class="act fp" points="${pts.map(([cm, t]) => `${X(cm).toFixed(1)},${Y(t).toFixed(1)}`).join(" ")}" fill="${st.colour || PAPER.muted}" fill-opacity="${fp.opacity ?? 0.18}" stroke="${st.colour || PAPER.muted}" stroke-opacity=".5" stroke-width=".8"/>`;
   });
-  const labels = [];
+  const labels = [], pdefs = new Map();
   const drawAct = (a, ghost) => {
     const st = S[a.style] || { kind: "line", colour: PAPER.muted, width: 2, label: { show: true, text: "{name}" } };
     const col = ghost ? PAPER.ghost : st.colour, g = geo(a), sel = !ghost && opts.selection?.kind === "act" && opts.selection.id === a.id;
@@ -216,14 +252,14 @@ export function renderChart(p, opts = {}) {
       const xa = Math.min(g.x0, g.x1), w = Math.max(4, Math.abs(g.x1 - g.x0)), ya = Math.min(g.y0, g.y1), hh = Math.max(2, Math.abs(g.y1 - g.y0));
       const xx = Math.abs(g.x1 - g.x0) < 4 ? (g.x0 + g.x1) / 2 - 2 : xa;
       if (sel) s += `<rect x="${xx - 4}" y="${ya - 4}" width="${w + 8}" height="${hh + 8}" fill="none" stroke="${PAPER.sel}" stroke-width="2.5"/>`;
-      s += `<rect x="${xx}" y="${ya}" width="${w}" height="${hh}" fill="${col}" fill-opacity="${st.fill_opacity ?? 0.35}" stroke="${col}" stroke-width="${st.width || 1.2}" ${dashOf(st.dash)}/>`;
+      s += `<rect x="${xx}" y="${ya}" width="${w}" height="${hh}" ${areaPaint(st, col, pdefs)} stroke="${col}" stroke-width="${st.width || 1.2}" ${dashOf(st.dash)}/>`;
     } else if (kind === "cut" || kind === "fill") {
       // earthworks: cut and fill as right-angle triangles (see triPath)
       const xa = Math.min(g.x0, g.x1), w = Math.max(6, Math.abs(g.x1 - g.x0)), ya = Math.min(g.y0, g.y1), hh = Math.max(4, Math.abs(g.y1 - g.y0));
       const xx = Math.abs(g.x1 - g.x0) < 6 ? (g.x0 + g.x1) / 2 - 3 : xa;
       if (sel) s += `<rect x="${xx - 4}" y="${ya - 4}" width="${w + 8}" height="${hh + 8}" fill="none" stroke="${PAPER.sel}" stroke-width="2.5"/>`;
       if (!ghost) s += `<rect x="${xx}" y="${ya}" width="${w}" height="${hh}" fill="transparent"/>`;
-      s += `<path d="${triPath(kind, xx, ya, w, hh)}" fill="${col}" fill-opacity="${st.fill_opacity ?? 0.35}" stroke="${col}" stroke-width="${st.width || 1.2}" stroke-linejoin="round" ${dashOf(st.dash)}/>`;
+      s += `<path d="${triPath(kind, xx, ya, w, hh)}" ${areaPaint(st, col, pdefs)} stroke="${col}" stroke-width="${st.width || 1.2}" stroke-linejoin="round" ${dashOf(st.dash)}/>`;
     } else if (kind === "milestone") {
       if (Math.abs(g.x1 - g.x0) > 2) s += `<line x1="${g.x0}" x2="${g.x1}" y1="${g.y0}" y2="${g.y0}" stroke="${col}" stroke-width="${st.width || 2}" ${dashOf(st.dash)}/>`;
       s += `<path d="M${g.x0} ${g.y0 - 7} l7 7 l-7 7 l-7 -7z" fill="${col}" stroke="${sel ? PAPER.sel : PAPER.sheet}" stroke-width="${sel ? 2.5 : 1}"/>`;
@@ -232,6 +268,7 @@ export function renderChart(p, opts = {}) {
       if (sel) s += `<line x1="${g.x0}" y1="${g.y0}" x2="${g.x1}" y2="${g.y1}" stroke="${PAPER.sel}" stroke-width="${wdt + 7}" stroke-linecap="round" stroke-opacity=".6"/>`;
       if (!ghost) s += `<line x1="${g.x0}" y1="${g.y0}" x2="${g.x1}" y2="${g.y1}" stroke="transparent" stroke-width="${Math.max(14, wdt + 8)}"/>`;
       s += `<line x1="${g.x0}" y1="${g.y0}" x2="${g.x1}" y2="${g.y1}" stroke="${col}" stroke-width="${wdt}" stroke-linecap="${kind === "bar" ? "butt" : "round"}" ${kind === "bar" ? 'stroke-opacity=".55"' : ""} ${dashOf(st.dash)}/>`;
+      s += marksSvg(st.marks, g.x0, g.y0, g.x1, g.y1, col, st.width || 3, st.mark_spacing || 22);
     }
     o += s + "</g>";
     const lab = { ...(st.label || {}), ...(a.label || {}) };
@@ -239,6 +276,20 @@ export function renderChart(p, opts = {}) {
   };
   ghostActs.forEach(a => drawAct(a, true));
   mainActs.forEach(a => drawAct(a, false));
+  if (pdefs.size) o += `<defs>${[...pdefs.values()].join("")}</defs>`;
+  // logic links from P6 (View → Logic links): predecessor end to successor end, by relationship type
+  if (view.show_links) {
+    const byCode = new Map(mainActs.map(a => [a.code, a]));
+    const end = (a, fin) => { const g = geo(a), k = (S[a.style] || {}).kind || "line"; return AREA.has(k) ? [(g.x0 + g.x1) / 2, fin ? g.y1 : g.y0] : fin ? [g.x1, g.y1] : [g.x0, g.y0]; };
+    let lk = "";
+    for (const a of mainActs) for (const l of a.links || []) {
+      const b = byCode.get(l.code); if (!b) continue;
+      const ty = (l.type || "FS").toUpperCase(), [xa, ya] = end(b, ty[0] === "F"), [xb, yb] = end(a, ty[1] === "F");
+      if (Math.hypot(xb - xa, yb - ya) < 3) continue;
+      lk += `<line x1="${xa.toFixed(1)}" y1="${ya.toFixed(1)}" x2="${xb.toFixed(1)}" y2="${yb.toFixed(1)}" stroke="${PAPER.link}" stroke-width="${l.driving ? 1.6 : 0.9}" stroke-opacity=".75" marker-end="url(#lkarrow)"><title>${esc(b.code)} → ${esc(a.code)} · ${ty}${l.lag_days ? ` lag ${l.lag_days} d` : ""}</title></line>`;
+    }
+    if (lk) o += `<defs><marker id="lkarrow" viewBox="0 0 8 8" refX="7.5" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L8 4L0 8z" fill="${PAPER.link}"/></marker></defs><g class="links" pointer-events="none">${lk}</g>`;
+  }
   // labels on top
   labels.forEach(({ a, g, st, lab, kind, col }) => {
     const text = labelText(lab.text || "{name}", a, p, st.name);
@@ -248,6 +299,11 @@ export function renderChart(p, opts = {}) {
     if (AREA.has(kind)) {
       const xa = Math.min(g.x0, g.x1), w = Math.abs(g.x1 - g.x0), ya = Math.min(g.y0, g.y1), hh = Math.abs(g.y1 - g.y0);
       const inside = w > text.length * size * 0.55 + 8 && hh > size + 4;
+      if (!inside && hh > text.length * size * 0.55 + 8 && hh > w * 1.5) { // tall and narrow: the label stands upright, inside if it fits
+        const tx = w >= size + 4 ? xa + w / 2 + size / 3 : xa + w + size + 2;
+        o += `<text transform="translate(${tx.toFixed(1)},${(ya + hh / 2).toFixed(1)}) rotate(-90)" text-anchor="middle" font-size="${size}" font-weight="500" font-family="${FONT}" ${halo} fill="${tcol}" data-act="${a.id}">${esc(text)}</text>`;
+        return;
+      }
       o += T(inside ? xa + w / 2 : Math.max(xa, Math.max(g.x0, g.x1)) + 6, ya + hh / 2 + size / 3, text,
         `font-size="${size}" font-weight="500" font-family="${FONT}" ${inside ? 'text-anchor="middle"' : ""} ${halo} data-act="${a.id}"`, `fill:${tcol}`);
       return;
@@ -410,14 +466,15 @@ export function renderLegend(p, { width = 220, size = 11, title = "Legend" } = {
   let y = size + 6, o = T(0, y, title.toUpperCase(), `font-size="${size}" font-weight="700" letter-spacing="1" font-family="${FONT}"`, `fill:${PAPER.ink}`);
   y += 8;
   const row = (sw, text) => { y += rh; o += sw(y - size / 2 + 1) + T(34, y, text, `font-size="${size}" font-family="${FONT}"`, `fill:${PAPER.ink}`); };
-  styles.forEach(s => row(cy => s.kind === "block" ? `<rect x="2" y="${cy - 5}" width="24" height="10" fill="${s.colour}" fill-opacity="${s.fill_opacity ?? .35}" stroke="${s.colour}"/>`
-    : s.kind === "cut" || s.kind === "fill" ? `<path d="${triPath(s.kind, 4, cy - 7, 20, 14)}" fill="${s.colour}" fill-opacity="${s.fill_opacity ?? .35}" stroke="${s.colour}" stroke-linejoin="round"/>`
+  const ldefs = new Map();
+  styles.forEach(s => row(cy => s.kind === "block" ? `<rect x="2" y="${cy - 5}" width="24" height="10" ${areaPaint(s, s.colour, ldefs)} stroke="${s.colour}"/>`
+    : s.kind === "cut" || s.kind === "fill" ? `<path d="${triPath(s.kind, 4, cy - 7, 20, 14)}" ${areaPaint(s, s.colour, ldefs)} stroke="${s.colour}" stroke-linejoin="round"/>`
     : s.kind === "milestone" ? `<path d="M14 ${cy - 6} l6 6 l-6 6 l-6 -6z" fill="${s.colour}"/>`
-    : `<line x1="2" x2="26" y1="${cy + 4}" y2="${cy - 4}" stroke="${s.colour}" stroke-width="${Math.min(5, s.width || 3)}" ${dashOf(s.dash)} ${s.kind === "bar" ? 'stroke-opacity=".55"' : ""}/>`, s.name));
+    : `<line x1="2" x2="26" y1="${cy + 4}" y2="${cy - 4}" stroke="${s.colour}" stroke-width="${Math.min(5, s.width || 3)}" ${dashOf(s.dash)} ${s.kind === "bar" ? 'stroke-opacity=".55"' : ""}/>` + marksSvg(s.marks, 2, cy + 4, 26, cy - 4, s.colour, Math.min(3, s.width || 3), 9), s.name));
   if (mk.length || ltypes.length) y += 6;
   const MKN = { milestone: "Milestone", band: "Access / interface band", shutdown: "Stand-down / shutdown", possession: "Possession", restriction: "Restriction" };
   mk.forEach(k => row(cy => k === "milestone" ? `<line x1="2" x2="26" y1="${cy}" y2="${cy}" stroke="#C00000" stroke-width="1.4" stroke-dasharray="6 3"/>`
     : `<rect x="2" y="${cy - 5}" width="24" height="10" fill="${k === "shutdown" ? "url(#hatchA)" : "#BF8F00"}" fill-opacity="${k === "shutdown" ? 1 : .3}" stroke="${PAPER.hatch}"/>`, MKN[k] || k));
   ltypes.forEach(t => row(cy => `<rect x="10" y="${cy - 5}" width="8" height="10" fill="${t.colour}" fill-opacity=".8"/>`, t.name));
-  return { svg: `<defs><pattern id="hatchA" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" stroke="${PAPER.hatch}" stroke-width="1.3"/></pattern></defs>` + o, height: y + 8 };
+  return { svg: `<defs>${[...ldefs.values()].join("")}<pattern id="hatchA" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" stroke="${PAPER.hatch}" stroke-width="1.3"/></pattern></defs>` + o, height: y + 8 };
 }
