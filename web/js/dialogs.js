@@ -398,10 +398,24 @@ export function productivities(app) {
 }
 
 // ------------------------------------------------------------------ playback video
-export function videoDialog(app, { t0, t1, mode = "both", onDone }) {
+export function videoDialog(app, { t0, t1, mode = "both", header = true, onDone }) {
   const iso = ms => new Date(ms).toISOString().slice(0, 10);
-  let cancel = false, busy = false;
-  modal({
+  let cancel = false, busy = false, url = null, timer = 0, D0 = null;
+  // small live preview of one frame with the current choices; the slider picks the moment within From–To
+  const preview = async () => {
+    const dlg = D0; if (!dlg || !dlg.isConnected) return;
+    const a = Date.parse(val(dlg, "vd-from")), b = Date.parse(val(dlg, "vd-to")) + 864e5;
+    if (!(b > a)) return;
+    const [W, H] = val(dlg, "vd-size").split("x").map(Number), t = a + (b - a) * (+val(dlg, "vd-at") / 1000);
+    const { frameSvg } = await import("./video.js");
+    const svg = frameSvg(app.p, t, W, H, { mode: val(dlg, "vd-mode"), header: $("#vd-head", dlg).checked, phase: 0.3 });
+    if (url) URL.revokeObjectURL(url);
+    url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
+    const img = $("#vd-prev", dlg); img.src = url; img.style.aspectRatio = `${W} / ${H}`;
+    $("#vd-at-date", dlg).textContent = niceDate(t);
+  };
+  const later = () => { clearTimeout(timer); timer = setTimeout(preview, 120); };
+  const md = modal({
     title: "Export playback video",
     body: el => el.append(
       h("p", { class: "hint" }, "Records the playback of the option shown on the chart, with the date and the legend on every frame. The video is made on your PC; nothing is uploaded."),
@@ -409,7 +423,12 @@ export function videoDialog(app, { t0, t1, mode = "both", onDone }) {
       h("div", { class: "row2" },
         field("Video length (seconds)", inp("vd-len", 20, { type: "number", min: 3, max: 300, step: 1 }), "The whole period plays in this time, then the last frame holds for 2 s."),
         field("Size", sel("vd-size", [["1920x1080", "1920 × 1080 (Full HD)"], ["1280x720", "1280 × 720"], ["3840x2160", "3840 × 2160 (4K, slow)"]], "1920x1080"))),
-      field("View", sel("vd-mode", [["both", "Both: corridor above the chart"], ["chart", "Chart only"], ["corridor", "Corridor only"]], mode)),
+      h("div", { class: "row2" },
+        field("View", sel("vd-mode", [["both", "Both: corridor above the chart"], ["chart", "Chart only"], ["corridor", "Corridor only"]], mode)),
+        h("label", { class: "chk", style: "align-self:end" }, h("input", { type: "checkbox", id: "vd-head", checked: header }), " Chart header (sections and locations above the chart)")),
+      h("div", { class: "vd-preview" },
+        h("img", { id: "vd-prev", alt: "Preview of a video frame" }),
+        h("div", { class: "vd-at" }, h("span", {}, "Preview at"), h("input", { type: "range", id: "vd-at", min: 0, max: 1000, step: 1, value: 500, "aria-label": "Preview date" }), h("span", { id: "vd-at-date", class: "pb-date" }))),
       h("progress", { id: "vd-prog", max: 1, value: 0, hidden: true, style: "width:100%" })),
     buttons: [
       { label: "Close", onClick: ({ close }) => { cancel = true; close(); } },
@@ -423,15 +442,19 @@ export function videoDialog(app, { t0, t1, mode = "both", onDone }) {
         setMsg("Making the video… keep this tab open.");
         try {
           const { exportVideo } = await import("./video.js");
-          const r = await exportVideo(app.p, { t0: a, t1: b, seconds: secs, W, H, mode: val(dlg, "vd-mode"), onProgress: f => { prog.value = f; setMsg(`Making the video… ${Math.round(f * 100)}%`); return !cancel; } });
+          const r = await exportVideo(app.p, { t0: a, t1: b, seconds: secs, W, H, mode: val(dlg, "vd-mode"), header: $("#vd-head", dlg).checked, onProgress: f => { prog.value = f; setMsg(`Making the video… ${Math.round(f * 100)}%`); return !cancel; } });
           if (!r) { setMsg("Cancelled."); return; }
           onDone(r);
           setMsg(`Saved a ${(r.blob.size / 1e6).toFixed(1)} MB ${r.ext.toUpperCase()} video.`, "ok");
           if (r.ext === "mp4") setTimeout(close, 1500);
         } finally { busy = false; }
       } }],
-    onClose: () => (cancel = true),
+    onClose: () => { cancel = true; clearTimeout(timer); if (url) URL.revokeObjectURL(url); },
   });
+  D0 = md.dlg;
+  D0.addEventListener("input", e => { if (e.target.closest(".vd-preview, .row2, label")) later(); });
+  D0.addEventListener("change", later);
+  preview();
 }
 
 // ------------------------------------------------------------------ corridor view settings

@@ -11,7 +11,7 @@ export function styleMap(p) { return Object.fromEntries(p.styles.map(s => [s.cod
 function typeMap(p) { return Object.fromEntries(p.location_types.map(t => [t.id, t])); }
 
 // ------------------------------------------------------------------ geometry
-export function geometry(p, { width = 1200, ppd = null, height = null, compact = false } = {}) {
+export function geometry(p, { width = 1200, ppd = null, height = null, compact = false, noHeader = false } = {}) {
   const c = p.chainage, T = p.time;
   const ML = compact ? 58 : 78, MR = compact ? 44 : 60;
   const W = Math.max(compact ? 300 : 700, width), PW = W - ML - MR;
@@ -27,13 +27,13 @@ export function geometry(p, { width = 1200, ppd = null, height = null, compact =
     const lab = p.locations.filter(l => rowOf(l) === r && l.label && l.ch_m >= c.start_m - 1 && l.ch_m <= c.end_m + 1);
     const any = p.locations.some(l => rowOf(l) === r);
     const longest = lab.reduce((m, l) => Math.max(m, (l.name || "").length + 9), 0);
-    rowH.push(!any ? 0 : lab.length ? Math.min(compact ? 90 : 150, 18 + longest * (compact ? 4.6 : 5.6)) : 16);
+    rowH.push(noHeader || !any ? 0 : lab.length ? Math.min(compact ? 90 : 150, 18 + longest * (compact ? 4.6 : 5.6)) : 16);
   }
-  const SH = p.sections.length ? 30 : 0;
+  const SH = !noHeader && p.sections.length ? 30 : 0;
   const AX = 24;
   // header image: stretched between two chainages (or the full chart width), above the section bands
   const L0 = Math.min(X(c.start_m), X(c.end_m)), R0 = Math.max(X(c.start_m), X(c.end_m));
-  const hi = p.header_image && p.header_image.data && p.header_image.show !== false ? p.header_image : null;
+  const hi = !noHeader && p.header_image && p.header_image.data && p.header_image.show !== false ? p.header_image : null;
   let img = null;
   if (hi) {
     const a = hi.fit === "full" ? L0 : X(hi.ch_start_m ?? c.start_m), b = hi.fit === "full" ? R0 : X(hi.ch_end_m ?? c.end_m);
@@ -53,7 +53,7 @@ export function geometry(p, { width = 1200, ppd = null, height = null, compact =
   const up = T.orientation === "up";
   const Y = ms => (up ? top + GH - ((ms - t0) / DAY) * px : top + ((ms - t0) / DAY) * px);
   const Yi = y => (up ? t0 + ((top + GH - y) / px) * DAY : t0 + ((y - top) / px) * DAY);
-  return { W, H: top + GH + bottomPad, ML, MR, PW, X, Xi, Y, Yi, top, GH, t0, t1, ppd: px, nd, SH, rowsTop, rowH, rowOf, headTop, AX, compact, img, L: L0, R: R0 };
+  return { W, H: top + GH + bottomPad, ML, MR, PW, X, Xi, Y, Yi, top, GH, t0, t1, ppd: px, nd, SH, rowsTop, rowH, rowOf, headTop, AX, compact, img, noHeader, L: L0, R: R0 };
 }
 
 // The symbol for a location on a header line at y = base (a..b is its extent for ranged locations).
@@ -94,7 +94,7 @@ export function renderChart(p, opts = {}) {
   }
 
   // ---- header: sections
-  p.sections.forEach((s, i) => {
+  if (!G.noHeader) p.sections.forEach((s, i) => {
     const a = Math.min(X(s.from_m), X(s.to_m)), b = Math.max(X(s.from_m), X(s.to_m)), w = b - a, cx = (a + b) / 2;
     o += `<rect x="${a}" y="${G.headTop}" width="${w}" height="${G.SH - 2}" fill="${i % 2 ? PAPER.band2 : PAPER.band}" stroke="${PAPER.rule}" stroke-width=".6"/>`;
     const nm = s.name.length * (fs * 0.55) < w - 6 ? s.name : w > 30 ? `S${i + 1}` : "";
@@ -299,7 +299,7 @@ export function playDynamic(p, G, t) {
   let ty = G.rowsTop; const r1 = G.rowH.findIndex(hh => hh > 0);
   for (let i = 0; i < Math.max(0, r1); i++) ty += G.rowH[i];
   const trackY = r1 >= 0 ? ty + G.rowH[r1] - 6 : G.headTop + G.SH + 8;
-  for (const { a, st, m } of fronts) {
+  if (!G.noHeader) for (const { a, st, m } of fronts) {
     if ((st.kind || "line") === "milestone") continue;
     const x = X(m);
     topSvg += `<path d="M${(x - 7).toFixed(1)} ${trackY - 14} L${(x + 7).toFixed(1)} ${trackY - 14} L${x.toFixed(1)} ${trackY - 2}Z" fill="${st.colour || PAPER.ink}" stroke="${PAPER.sheet}" stroke-width="1.2"><title>${esc(a.name)} · ${chFmt(p, m)}</title></path>`;

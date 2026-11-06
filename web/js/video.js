@@ -28,7 +28,7 @@ function corridorFor(p, t, w, h, mode, phase, compact) {
 }
 
 // One frame as an SVG string of size W x H. mode: "chart" | "corridor" | "both".
-export function frameSvg(p, t, W, H, { mode = "chart", phase = 0 } = {}) {
+export function frameSvg(p, t, W, H, { mode = "chart", phase = 0, header = true } = {}) {
   const head = Math.round(H * 0.085), legendW = Math.round(W * 0.17), pad = 12, compact = W < 1500;
   const ds = (p.datasets.find(d => d.id === p.view.main_dataset) || {}).name || "";
   const n = activeAt(p, t).length, d = new Date(t);
@@ -42,7 +42,7 @@ export function frameSvg(p, t, W, H, { mode = "chart", phase = 0 } = {}) {
   const gap = cor ? 8 : 0, chH = ah - corH - gap;
   let chartSvg = "";
   if (mode !== "corridor" && chH > 40) {
-    const { svg: chart, G } = renderChart(p, { width: aw, height: chH, compact, playTime: t });
+    const { svg: chart, G } = renderChart(p, { width: aw, height: chH, compact, playTime: t, noHeader: !header });
     chartSvg = `<svg x="${pad}" y="${head + pad + corH + gap}" width="${aw}" height="${chH}" viewBox="0 0 ${G.W} ${G.H}" preserveAspectRatio="xMidYMin meet">${chart}</svg>`;
   }
   const lg = renderLegend(p, { size: 11 });
@@ -77,8 +77,8 @@ export async function exportFrame(p, t, W = 1920, H = 1080, opts = {}) {
 }
 
 // Encode the playback from t0 to t1 into a video of `seconds` length. onProgress(0..1); return false from it to cancel.
-export async function exportVideo(p, { t0, t1, seconds = 20, fps = 30, W = 1920, H = 1080, hold = 2, mode = "chart", onProgress = () => true }) {
-  const svgAt = i => frameSvg(p, tAt(i), W, H, { mode, phase: (i / fps) % 1 });
+export async function exportVideo(p, { t0, t1, seconds = 20, fps = 30, W = 1920, H = 1080, hold = 2, mode = "chart", header = true, onProgress = () => true }) {
+  const svgAt = i => frameSvg(p, tAt(i), W, H, { mode, header, phase: (i / fps) % 1 });
   const frames = Math.max(2, Math.round(seconds * fps)), extra = Math.round(hold * fps);
   const cv = Object.assign(document.createElement("canvas"), { width: W, height: H });
   const ctx = cv.getContext("2d");

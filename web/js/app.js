@@ -173,7 +173,9 @@ function drawChart() {
     COR = r.C; cs.setAttribute("viewBox", `0 0 ${r.width} ${r.height}`); cs.setAttribute("width", r.width); cs.setAttribute("height", r.height); cs.innerHTML = r.svg;
     wrap.scrollLeft = box.scrollLeft;
   } else COR = null;
-  const r = renderChart(app.p, { width, selection: play.on ? null : app.sel, interactive: true, playTime: play.on ? play.t : null });
+  const noHeader = play.on && corridorCfg(app.p).chart_header === false;
+  $("#pb-header").checked = !noHeader;
+  const r = renderChart(app.p, { width, selection: play.on ? null : app.sel, interactive: true, playTime: play.on ? play.t : null, noHeader });
   G = r.G;
   svg.setAttribute("viewBox", `0 0 ${G.W} ${G.H}`); svg.setAttribute("width", G.W); svg.setAttribute("height", G.H);
   svg.innerHTML = r.svg;
@@ -597,7 +599,7 @@ const play = { on: false, running: false, t: 0, t0: 0, t1: 0, last: 0, drawn: 0,
 const fileBase = () => (app.p.name || "time_chainage").replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "");
 function openVideo() {
   playStop(); playRange();
-  D.videoDialog(app, { t0: play.t0, t1: play.t1 - DAY, mode: corridorCfg(app.p).show || "both", onDone: r => download(`${fileBase()}_playback.${r.ext}`, r.blob, r.blob.type) });
+  D.videoDialog(app, { t0: play.t0, t1: play.t1 - DAY, mode: corridorCfg(app.p).show || "both", header: corridorCfg(app.p).chart_header !== false, onDone: r => download(`${fileBase()}_playback.${r.ext}`, r.blob, r.blob.type) });
 }
 function playRange() {
   const p = app.p, acts = p.activities.filter(a => a.dataset === p.view.main_dataset);
@@ -661,8 +663,9 @@ function wire() {
   $("#pb-play").onclick = playToggle;
   $("#pb-start").onclick = () => playSeek(play.t0);
   $("#pb-close").onclick = () => playClose();
-  $("#pb-frame").onclick = async () => { const { exportFrame } = await import("./video.js"); download(`${fileBase()}_${new Date(play.t).toISOString().slice(0, 10)}.png`, await exportFrame(app.p, play.t, 1920, 1080, { mode: corMode() }), "image/png"); };
+  $("#pb-frame").onclick = async () => { const { exportFrame } = await import("./video.js"); download(`${fileBase()}_${new Date(play.t).toISOString().slice(0, 10)}.png`, await exportFrame(app.p, play.t, 1920, 1080, { mode: corMode(), header: corridorCfg(app.p).chart_header !== false }), "image/png"); };
   $$("#pb-mode button").forEach(b => (b.onclick = () => { if (!app.p || corridorCfg(app.p).show === b.dataset.show) return; app.commit(); app.p.view.corridor.show = b.dataset.show; app.changed(); }));
+  $("#pb-header").onchange = e => { if (!app.p) return; app.commit(); app.p.view.corridor.chart_header = e.target.checked; app.changed(); };
   $("#pb-cor").onclick = () => need() && D.corridorSettings(app);
   $("#chart-scroll").addEventListener("scroll", e => { const w = $("#corridor-wrap"); if (!w.hidden) w.scrollLeft = e.target.scrollLeft; });
   $("#pb-video").onclick = () => openVideo();

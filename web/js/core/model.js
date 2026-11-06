@@ -80,7 +80,7 @@ export function newProject(name = "Untitled", discipline = "rail", chStart = 0, 
 
 // Corridor view (crew playback) settings, kept with the project's other view settings.
 export function corridorDefaults() {
-  return { show: "both", lanes: null, stages: [], lookahead_days: 21, lane_height: 30, show_tags: true };
+  return { show: "both", lanes: null, stages: [], lookahead_days: 21, lane_height: 30, show_tags: true, chart_header: true };
 }
 
 export function makeActivity(dataset, code, name, start, finish, ch0_m, ch1_m, style, extra = {}) {
