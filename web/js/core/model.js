@@ -36,7 +36,7 @@ export const unitFactor = u => UNIT_FACTOR[u] || 1;
 export const PAPER_MM = { A4: [297, 210], A3: [420, 297], A2: [594, 420], A1: [841, 594], A0: [1189, 841], Letter: [279, 216], Ledger: [432, 279], "ANSI D": [864, 559] };
 
 export function makeStyle(code, name, kind = "line", colour = "#1F6E8C", extra = {}) {
-  return { code, name, kind, colour, width: kind === "line" || kind === "bar" ? 3 : 1.5, dash: "solid", fill_opacity: kind === "block" ? 0.35 : 0.2,
+  return { code, name, kind, colour, width: kind === "line" || kind === "bar" ? 3 : 1.5, dash: "solid", fill_opacity: kind === "block" || kind === "cut" || kind === "fill" ? 0.35 : 0.2,
     label: { show: true, text: "{name}", follow_slope: true, position: "mid", side: "above", size: 11 },
     footprint: { enabled: false, length_m: 0, lag_days: 0, opacity: 0.18 }, legend: true, ...extra };
 }

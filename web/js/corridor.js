@@ -1,7 +1,7 @@
 // Corridor view: crews as "ants" crawling along lanes by chainage, the track line filling in by stage.
 // Same horizontal scale as the chart (geometry()), so a crew sits directly above its work front on the chart.
 // renderCorridor() draws everything once; corridorDynamic() redraws only what moves, for playback frames.
-import { geometry, styleMap, PAPER, chainageAxis, locSymbol, progressAt, progressInfo, isStoodDown } from "./render.js";
+import { geometry, styleMap, PAPER, chainageAxis, locSymbol, progressAt, progressInfo, isStoodDown, AREA, triPath } from "./render.js";
 import { DAY, DOW, esc, chFmt, lenFmt, niceDate, tms } from "./util.js";
 import { corridorDefaults } from "./core/model.js";
 
@@ -53,7 +53,7 @@ export function corridorGeometry(p, { width = 1200, compact = false, laneHeight 
     items.push({ a, li, x0, x1, kind, col: st.colour || PAPER.muted, point: Math.abs(x1 - x0) < 1, tag: a.code || st.name || a.style || "" });
   }
   const pat = {}; // one hatch pattern per block colour
-  [...new Set(items.filter(i => i.kind === "block").map(i => i.col))].forEach((col, n) => (pat[col] = `cor-h${n}`));
+  [...new Set(items.filter(i => AREA.has(i.kind)).map(i => i.col))].forEach((col, n) => (pat[col] = `cor-h${n}`));
   const H = lanesTop + lanes.length * lh + 8;
   return { G, W: G.W, H, L: G.L, R: G.R, X: G.X, lanes, lh, headH, axisY, secTop, secH, labY, trackY, lanesTop, items, pat, cfg,
     laneY: i => lanesTop + i * lh + lh / 2, compact };
@@ -168,11 +168,12 @@ export function corridorDynamic(p, C, t, opts = {}) {
     if (future && s - t > look) continue;
     const paused = active && isStoodDown(p, a, t);
     if (active) paused ? lane[li].paused++ : lane[li].active++;
-    if (kind === "block") {
+    if (AREA.has(kind)) {
       const xa = Math.min(x0, x1), w = Math.max(3, Math.abs(x1 - x0)), y = yc - lh * 0.3, hh = lh * 0.6;
-      if (future) acts += `<rect x="${f1(xa)}" y="${f1(y)}" width="${f1(w)}" height="${f1(hh)}" fill="none" stroke="${col}" stroke-opacity="${(0.25 + 0.45 * (1 - (s - t) / look)).toFixed(2)}" stroke-dasharray="3 3"/>`;
-      else if (done) acts += `<rect x="${f1(xa)}" y="${f1(y)}" width="${f1(w)}" height="${f1(hh)}" fill="${col}" fill-opacity=".12"/>`;
-      else { acts += `<rect x="${f1(xa)}" y="${f1(y)}" width="${f1(w)}" height="${f1(hh)}" fill="url(#${C.pat[col]})" stroke="${col}" stroke-width="1"/>`; tagList.push({ li, x: xa + w / 2, text: it.tag, col }); }
+      const shp = kind === "block" ? `<rect x="${f1(xa)}" y="${f1(y)}" width="${f1(w)}" height="${f1(hh)}"` : `<path d="${triPath(kind, xa, y, Math.max(6, w), hh)}" stroke-linejoin="round"`;
+      if (future) acts += `${shp} fill="none" stroke="${col}" stroke-opacity="${(0.25 + 0.45 * (1 - (s - t) / look)).toFixed(2)}" stroke-dasharray="3 3"/>`;
+      else if (done) acts += `${shp} fill="${col}" fill-opacity=".12"/>`;
+      else { acts += `${shp} fill="url(#${C.pat[col]})" stroke="${col}" stroke-width="1"/>`; tagList.push({ li, x: xa + w / 2, text: it.tag, col }); }
       continue;
     }
     if (it.point) {

@@ -39,7 +39,7 @@ export function exportTchart(p) {
   const black = col("#000000"), white = col("#FFFFFF"), grey = col("#808080"), clear = col("#FFFFFF", 0), ink = col("#18262B"), axis = col("#A9A9A9");
   const lib = [], vals = [];
   p.styles.forEach((s, i) => {
-    const id = gid(), c = col(s.colour), block = s.kind === "block";
+    const id = gid(), c = col(s.colour), block = s.kind === "block" || s.kind === "cut" || s.kind === "fill"; // TurboChart gets cut / fill as filled blocks
     const cv = { FontSize: Math.round(s.label.size || 11), Id: id, Legend: s.legend !== false, OrderCanvas: 1, OrderLegend: i + 1, PositionOffset: 0, ShowText: !!s.label.show,
       TextColour: black, TextHorzAlign: 0, TextVertAlign: 0, Transparency: 0, Visible: true };
     lib.push({ ChartValues: cv, Description: s.name, DistanceOffset: 10, EndShape: { FillColour: c, ShapeType: 0, Size: 10 }, FillColour: block ? c : white, FillLineColour: c,

@@ -193,7 +193,7 @@ export function renderChart(p, opts = {}) {
   const visible = a => a.dataset === main || (cmp && a.dataset === cmp);
   const acts = p.activities.filter(visible);
   const ghostActs = acts.filter(a => a.dataset !== main), mainActs = acts.filter(a => a.dataset === main);
-  const kindOrder = { block: 0, bar: 1, line: 2, milestone: 3 };
+  const kindOrder = { block: 0, cut: 0, fill: 0, bar: 1, line: 2, milestone: 3 };
   mainActs.sort((a, b) => (kindOrder[S[a.style]?.kind] ?? 2) - (kindOrder[S[b.style]?.kind] ?? 2));
   const geo = a => ({ x0: X(a.ch0_m), x1: X(a.ch1_m), y0: Y(tms(a.start)), y1: Y(tms(a.finish)) });
   const actStart = o.length; // activity markup from here on is drawn twice during playback
@@ -217,6 +217,13 @@ export function renderChart(p, opts = {}) {
       const xx = Math.abs(g.x1 - g.x0) < 4 ? (g.x0 + g.x1) / 2 - 2 : xa;
       if (sel) s += `<rect x="${xx - 4}" y="${ya - 4}" width="${w + 8}" height="${hh + 8}" fill="none" stroke="${PAPER.sel}" stroke-width="2.5"/>`;
       s += `<rect x="${xx}" y="${ya}" width="${w}" height="${hh}" fill="${col}" fill-opacity="${st.fill_opacity ?? 0.35}" stroke="${col}" stroke-width="${st.width || 1.2}" ${dashOf(st.dash)}/>`;
+    } else if (kind === "cut" || kind === "fill") {
+      // earthworks: cut as a descending triangle (wide at the top, point at the bottom), fill as an ascending one
+      const xa = Math.min(g.x0, g.x1), w = Math.max(6, Math.abs(g.x1 - g.x0)), ya = Math.min(g.y0, g.y1), hh = Math.max(4, Math.abs(g.y1 - g.y0));
+      const xx = Math.abs(g.x1 - g.x0) < 6 ? (g.x0 + g.x1) / 2 - 3 : xa;
+      if (sel) s += `<rect x="${xx - 4}" y="${ya - 4}" width="${w + 8}" height="${hh + 8}" fill="none" stroke="${PAPER.sel}" stroke-width="2.5"/>`;
+      if (!ghost) s += `<rect x="${xx}" y="${ya}" width="${w}" height="${hh}" fill="transparent"/>`;
+      s += `<path d="${triPath(kind, xx, ya, w, hh)}" fill="${col}" fill-opacity="${st.fill_opacity ?? 0.35}" stroke="${col}" stroke-width="${st.width || 1.2}" stroke-linejoin="round" ${dashOf(st.dash)}/>`;
     } else if (kind === "milestone") {
       if (Math.abs(g.x1 - g.x0) > 2) s += `<line x1="${g.x0}" x2="${g.x1}" y1="${g.y0}" y2="${g.y0}" stroke="${col}" stroke-width="${st.width || 2}" ${dashOf(st.dash)}/>`;
       s += `<path d="M${g.x0} ${g.y0 - 7} l7 7 l-7 7 l-7 -7z" fill="${col}" stroke="${sel ? PAPER.sel : PAPER.sheet}" stroke-width="${sel ? 2.5 : 1}"/>`;
@@ -238,7 +245,7 @@ export function renderChart(p, opts = {}) {
     if (!text) return;
     const size = lab.size || fs, side = lab.side === "below" ? size + 4 : -6;
     const tcol = lab.colour || col;
-    if (kind === "block") {
+    if (AREA.has(kind)) {
       const xa = Math.min(g.x0, g.x1), w = Math.abs(g.x1 - g.x0), ya = Math.min(g.y0, g.y1), hh = Math.abs(g.y1 - g.y0);
       const inside = w > text.length * size * 0.55 + 8 && hh > size + 4;
       o += T(inside ? xa + w / 2 : Math.max(xa, Math.max(g.x0, g.x1)) + 6, ya + hh / 2 + size / 3, text,
@@ -274,6 +281,14 @@ export function renderChart(p, opts = {}) {
   return { svg: o, G };
 }
 
+// Kinds drawn as an area over their chainage and dates (static, no moving front)
+export const AREA = new Set(["block", "cut", "fill"]);
+// Cut: descending triangle (base along the top, point at the bottom). Fill: ascending (point at the top).
+export function triPath(kind, x, y, w, h) {
+  const m = (x + w / 2).toFixed(1), X0 = x.toFixed(1), X1 = (x + w).toFixed(1), Y0 = y.toFixed(1), Y1 = (y + h).toFixed(1);
+  return kind === "cut" ? `M${X0} ${Y0}H${X1}L${m} ${Y1}Z` : `M${X0} ${Y1}H${X1}L${m} ${Y0}Z`;
+}
+
 // The parts of a playback frame that move: cut-off of the done layer, work fronts, date line, date tag and crew markers.
 // Called once per frame; the rest of the chart is drawn once when playback starts.
 export function playDynamic(p, G, t) {
@@ -283,7 +298,7 @@ export function playDynamic(p, G, t) {
   let grid = "", topSvg = "";
   for (const { a, st, m, paused } of fronts) {
     const col = st.colour || PAPER.ink, x = X(m), kind = st.kind || "line";
-    if (kind === "block") {
+    if (AREA.has(kind)) {
       const xa = Math.min(X(a.ch0_m), X(a.ch1_m)), w = Math.max(4, Math.abs(X(a.ch1_m) - X(a.ch0_m)));
       grid += `<rect x="${(xa - 2).toFixed(1)}" y="${(yp - 4).toFixed(1)}" width="${(w + 4).toFixed(1)}" height="8" fill="${col}" stroke="${PAPER.sheet}" stroke-width="1.5"><title>${esc(a.name)} – working</title></rect>`;
     } else if (kind !== "milestone") {
@@ -396,6 +411,7 @@ export function renderLegend(p, { width = 220, size = 11, title = "Legend" } = {
   y += 8;
   const row = (sw, text) => { y += rh; o += sw(y - size / 2 + 1) + T(34, y, text, `font-size="${size}" font-family="${FONT}"`, `fill:${PAPER.ink}`); };
   styles.forEach(s => row(cy => s.kind === "block" ? `<rect x="2" y="${cy - 5}" width="24" height="10" fill="${s.colour}" fill-opacity="${s.fill_opacity ?? .35}" stroke="${s.colour}"/>`
+    : s.kind === "cut" || s.kind === "fill" ? `<path d="${triPath(s.kind, 4, cy - 7, 20, 14)}" fill="${s.colour}" fill-opacity="${s.fill_opacity ?? .35}" stroke="${s.colour}" stroke-linejoin="round"/>`
     : s.kind === "milestone" ? `<path d="M14 ${cy - 6} l6 6 l-6 6 l-6 -6z" fill="${s.colour}"/>`
     : `<line x1="2" x2="26" y1="${cy + 4}" y2="${cy - 4}" stroke="${s.colour}" stroke-width="${Math.min(5, s.width || 3)}" ${dashOf(s.dash)} ${s.kind === "bar" ? 'stroke-opacity=".55"' : ""}/>`, s.name));
   if (mk.length || ltypes.length) y += 6;
