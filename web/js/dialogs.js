@@ -407,7 +407,7 @@ export function videoDialog(app, { t0, t1, mode = "both", header = true, onDone 
   const bgOpts = [["white", "White"], ["brand", "Brand colour"], ["black", "Black"]];
   // the intro / outro settings as entered (false when switched off)
   const introOf = dlg => chk(dlg, "vi-on") && { seconds: +val(dlg, "vi-sec") || 4, bg: val(dlg, "vi-bg"), title: val(dlg, "vi-title").trim(), subtitle: val(dlg, "vi-sub").trim(), details: chk(dlg, "vi-det") };
-  const outroOf = dlg => chk(dlg, "vo-on") && { seconds: +val(dlg, "vo-sec") || 3, bg: val(dlg, "vo-bg"), title: val(dlg, "vi-title").trim(), subtitle: val(dlg, "vi-sub").trim(), details: chk(dlg, "vo-det"), line: val(dlg, "vo-line").trim() };
+  const outroOf = dlg => chk(dlg, "vo-on") && { seconds: +val(dlg, "vo-sec") || 3, bg: val(dlg, "vo-bg"), title: val(dlg, "vi-title").trim(), subtitle: val(dlg, "vi-sub").trim(), details: chk(dlg, "vo-det"), line: val(dlg, "vo-line").trim(), content: val(dlg, "vo-what"), tagline: val(dlg, "vo-tag").trim() };
   // small live preview: a frame at the slider's date, or the intro / outro card as it looks when fully faded in
   const preview = async () => {
     const dlg = D0; if (!dlg || !dlg.isConnected) return;
@@ -452,6 +452,9 @@ export function videoDialog(app, { t0, t1, mode = "both", header = true, onDone 
         h("label", { class: "chk" }, h("input", { type: "checkbox", id: "vo-on", checked: O.on !== false }), " End by crossfading back to the logo and title card, then fading out"),
         h("div", { class: "row3" }, field("Length (s)", num("vo-sec", O.seconds ?? 3, 2, 15)), field("Background", sel("vo-bg", bgOpts, O.bg || "white")),
           h("label", { class: "chk", style: "align-self:end" }, h("input", { type: "checkbox", id: "vo-det", checked: O.details !== false }), " Client / contract line")),
+        h("div", { class: "row2" },
+          field("Show", sel("vo-what", [["project", "Logo and project name"], ["logo", "Logo only"], ["tagline", "Logo and tagline"], ["name", "Project name only"]], O.content || "project")),
+          field("Tagline", inp("vo-tag", O.tagline || "", { placeholder: (app.p.brand && app.p.brand.tagline) || "Set one under Project → Branding, or type it here" }))),
         field("Closing line", inp("vo-line", O.line || "", { placeholder: "e.g. website, contact or “Programme rev A”" }))),
       h("details", { class: "vd-sec" }, h("summary", {}, "Music"),
         h("p", { class: "hint" }, "Choose an audio file each time you export (MP3, M4A, WAV, OGG). It loops if it is shorter than the video. Use music you have the rights to."),
@@ -486,7 +489,7 @@ export function videoDialog(app, { t0, t1, mode = "both", header = true, onDone 
         const mus = { volume: Math.max(0, Math.min(100, +val(dlg, "vm-vol") || 0)) / 100, fade_in: Math.max(0, +val(dlg, "vm-fi") || 0), fade_out: Math.max(0, +val(dlg, "vm-fo") || 0), start_at: Math.max(0, +val(dlg, "vm-at") || 0) };
         // keep the choices with the project for next time
         V.intro = { ...V.intro, on: !!intro, seconds: +val(dlg, "vi-sec") || 4, bg: val(dlg, "vi-bg"), title: val(dlg, "vi-title").trim(), subtitle: val(dlg, "vi-sub").trim(), details: chk(dlg, "vi-det") };
-        V.outro = { ...V.outro, on: !!outro, seconds: +val(dlg, "vo-sec") || 3, bg: val(dlg, "vo-bg"), line: val(dlg, "vo-line").trim(), details: chk(dlg, "vo-det") };
+        V.outro = { ...V.outro, on: !!outro, seconds: +val(dlg, "vo-sec") || 3, bg: val(dlg, "vo-bg"), line: val(dlg, "vo-line").trim(), details: chk(dlg, "vo-det"), content: val(dlg, "vo-what"), tagline: val(dlg, "vo-tag").trim() };
         V.music = mus; app.changed(false);
         busy = true; cancel = false;
         const prog = $("#vd-prog", dlg); prog.hidden = false;
@@ -541,6 +544,7 @@ export function brandDialog(app) {
     editor.append(
       h("div", { class: "row2" },
         field("Company name", h("input", { value: b.name || "", oninput: e => upd("name", e.target.value), onchange: () => fillPick() })),
+        field("Tagline (optional)", h("input", { value: b.tagline || "", placeholder: "Used on the video outro", oninput: e => upd("tagline", e.target.value) })),
         field("Logo", h("input", { type: "file", accept: "image/png,image/jpeg,image/gif,image/webp,image/svg+xml",
           onchange: async e => { try { Object.assign(b, await readLogo(e.target.files[0])); preview(); } catch (err) { app.toast(err.message); } } }),
           "PNG with a transparent background, or SVG, works best.")),

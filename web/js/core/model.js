@@ -81,7 +81,7 @@ export function newProject(name = "Untitled", discipline = "rail", chStart = 0, 
 // Video export settings: intro and outro cards, and music levels (the music file itself is chosen at export).
 export function videoDefaults() {
   return { intro: { on: true, seconds: 4, bg: "white", title: "", subtitle: "", details: true },
-    outro: { on: true, seconds: 3, bg: "white", line: "", details: true },
+    outro: { on: true, seconds: 3, bg: "white", line: "", details: true, content: "project", tagline: "" },
     music: { volume: 0.8, fade_in: 1, fade_out: 3, start_at: 0 } };
 }
 

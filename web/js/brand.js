@@ -3,7 +3,7 @@
 import { esc, uid } from "./util.js";
 
 const KEY = "tcs-brands";
-export const BRAND_DEFAULTS = { name: "", logo: null, logo_w: 0, logo_h: 0, colour: "#18262B", accent: "#C00000" };
+export const BRAND_DEFAULTS = { name: "", tagline: "", logo: null, logo_w: 0, logo_h: 0, colour: "#18262B", accent: "#C00000" };
 
 export function listBrands() {
   try { const v = JSON.parse(localStorage.getItem(KEY) || "[]"); return Array.isArray(v) ? v : []; } catch (e) { return []; }

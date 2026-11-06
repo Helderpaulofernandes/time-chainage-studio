@@ -96,25 +96,40 @@ async function svgImage(svg) {
 // Background colour of the intro / outro cards: "white", "brand" or "black"
 export function cardBg(p, bg) { return bg === "black" ? "#000000" : bg === "brand" ? ((p.brand && p.brand.colour) || "#18262B") : "#FFFFFF"; }
 
-// Intro / outro card, in two layers so they can fade separately: the logo, and the project name with its details.
-// o: { bg, title, subtitle, details, line } (blank title / subtitle use the project's own)
+// Intro / outro card, in two layers so they can fade separately: the logo, and the text under it.
+// o: { bg, title, subtitle, details, line, content, tagline } (blank title / subtitle use the project's own)
+// content: "project" (logo + project name, the default), "logo" (logo only), "tagline" (logo + tagline), "name" (project name only)
 export function cardSvg(p, W, H, layer, o = {}) {
   const br = p.brand, m = p.meta || {}, bgc = cardBg(p, o.bg), onBg = onColour(bgc);
+  let content = o.content || "project";
+  if ((content === "logo" || content === "tagline") && !(br && (br.logo || br.name))) content = "project"; // nothing to show: fall back
+  const tagline = (o.tagline || (br && br.tagline) || "").trim();
+  if (content === "tagline" && !tagline) content = "logo";
   const titleCol = bgc === "#FFFFFF" ? ((br && br.colour) || "#18262B") : onBg;
   const muted = onBg === "#FFFFFF" ? "#C9D2D2" : "#5D6B70";
   const ds = (p.datasets.find(d => d.id === p.view.main_dataset) || {}).name || "";
-  const hasLogo = !!(br && br.logo);
+  const hasLogo = !!(br && br.logo) && content !== "name";
   let out = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="${FONT}">`;
   if (layer === "logo") {
+    if (content === "name") return out + "</svg>";
+    const solo = content === "logo", tag = content === "tagline";
     if (hasLogo) {
-      const bw = W * 0.4, bh = H * 0.34, x = W * 0.3, y = H * 0.16;
+      // logo only: larger and centred; with a tagline: a little higher to leave room
+      const bw = W * (solo ? 0.5 : 0.4), bh = H * (solo ? 0.42 : 0.34), x = (W - bw) / 2, y = solo ? (H - bh) / 2 : tag ? H * 0.2 : H * 0.16;
       // on a coloured background the logo sits on a white plate so it keeps its own colours
       if (bgc !== "#FFFFFF") { const lw = Math.min(bw, logoWidth(br, bh)), pw = lw + H * 0.06, ph = Math.min(bh, lw / ((br.logo_w || 3) / (br.logo_h || 1))) + H * 0.06;
         out += `<rect x="${(W - pw) / 2}" y="${y + (bh - ph) / 2}" width="${pw}" height="${ph}" rx="${H * 0.012}" fill="#fff"/>`; }
       out += logoSvg(br, x, y, bw, bh, "center");
-    } else if (br && br.name) out += `<text x="${W / 2}" y="${H * 0.36}" text-anchor="middle" font-size="${Math.round(H * 0.06)}" font-weight="700" letter-spacing="2" fill="${titleCol}">${esc(br.name.toUpperCase())}</text>`;
+    } else if (br && br.name) out += `<text x="${W / 2}" y="${H * (solo ? 0.52 : 0.36)}" text-anchor="middle" font-size="${Math.round(H * 0.06)}" font-weight="700" letter-spacing="2" fill="${titleCol}">${esc(br.name.toUpperCase())}</text>`;
+  } else if (content === "logo") {
+    if (o.line) out += `<text x="${W / 2}" y="${H * 0.86}" text-anchor="middle" font-size="${Math.round(H * 0.026)}" fill="${muted}">${esc(o.line)}</text>`;
+  } else if (content === "tagline") {
+    const mid = Math.round(H * 0.042);
+    out += `<rect x="${W * 0.44}" y="${H * 0.62}" width="${W * 0.12}" height="${Math.max(2, H * 0.004)}" fill="${(br && br.accent) || "#C00000"}"/>`;
+    out += `<text x="${W / 2}" y="${H * 0.62 + mid * 1.9}" text-anchor="middle" font-size="${mid}" font-weight="600" fill="${titleCol}">${esc(tagline)}</text>`;
+    if (o.line) out += `<text x="${W / 2}" y="${H * 0.62 + mid * 3.4}" text-anchor="middle" font-size="${Math.round(H * 0.026)}" fill="${muted}">${esc(o.line)}</text>`;
   } else {
-    const y = hasLogo || (br && br.name) ? H * 0.6 : H * 0.46, big = Math.round(H * 0.062), mid = Math.round(H * 0.03), sm = Math.round(H * 0.022);
+    const y = hasLogo || (content !== "name" && br && br.name) ? H * 0.6 : H * 0.46, big = Math.round(H * 0.062), mid = Math.round(H * 0.03), sm = Math.round(H * 0.022);
     out += `<rect x="${W * 0.42}" y="${y - big * 1.45}" width="${W * 0.16}" height="${Math.max(2, H * 0.004)}" fill="${(br && br.accent) || "#C00000"}"/>`;
     out += `<text x="${W / 2}" y="${y}" text-anchor="middle" font-size="${big}" font-weight="700" fill="${titleCol}">${esc(o.title || m.title || p.name)}</text>`;
     let yy = y;
