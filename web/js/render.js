@@ -1,23 +1,43 @@
 // Time-chainage drawing engine. Produces SVG markup for the screen and for the printed page.
 // Chainage runs across, time runs down (or up). Everything is placed through one geometry object.
 import { DAY, MON, tms, esc, chFmt, chUnitLabel, lenFmt, isoWeek, labelText, niceDate, niceFinish } from "./util.js";
+import { bandHeight, bandsSvg, sideColsSvg, resourcesSvg, overlaysSvg, headerPinsSvg, onChart, actGeo } from "./extras.js";
 
 export const PAPER = { ink: "#18262B", muted: "#5D6B70", rule: "#C9D2D2", faint: "#EEF2F1", band: "#EDF2F1", band2: "#E2EAE8",
   sheet: "#FFFFFF", ghost: "#9AA5A8", hatch: "#9AA7AA", sel: "#E0A400", link: "#C00000" };
-const FONT = "IBM Plex Sans Condensed, Arial Narrow, Arial, sans-serif";
+// Fallbacks cover non-Latin scripts (Thai, CJK) when the chart is printed or rendered to video
+export const FONT = "IBM Plex Sans Condensed, Arial Narrow, Arial, Leelawadee UI, Tahoma, Noto Sans Thai, Microsoft YaHei, sans-serif";
 const MONO = "IBM Plex Mono, Consolas, monospace";
 
 export function styleMap(p) { return Object.fromEntries(p.styles.map(s => [s.code, s])); }
 function typeMap(p) { return Object.fromEntries(p.location_types.map(t => [t.id, t])); }
 
 // ------------------------------------------------------------------ geometry
-export function geometry(p, { width = 1200, ppd = null, height = null, compact = false, noHeader = false } = {}) {
+export function geometry(p, opts = {}) {
+  const { width = 1200, ppd = null, height = null, compact = false, noHeader = false, squeeze = 1 } = opts;
   const c = p.chainage, T = p.time;
-  const ML = compact ? 58 : 78, MR = compact ? 44 : 60;
-  const W = Math.max(compact ? 300 : 700, width), PW = W - ML - MR;
-  const span = (c.end_m - c.start_m) || 1;
-  const X = m => ML + ((c.reverse ? c.end_m - m : m - c.start_m) / span) * PW;
-  const Xi = x => { const f = ((x - ML) / PW) * span; return c.reverse ? c.end_m - f : c.start_m + f; };
+  // left to right: month column | period column (if on the left) | side columns | grid | side columns | period column | month column | resources
+  const per = T.period_labels || "weeks", perSide = per === "none" ? null : T.period_side || "right", monSide = T.month_side || "left";
+  const monW = compact ? 58 : 78, perW = compact ? 40 : 54;
+  const cols = (p.side_cols || []).filter(s => s.show !== false);
+  const colW = s => (s.width || 90) * (compact ? 0.75 : 1);
+  const colsLW = cols.filter(s => s.side !== "right").reduce((n, s) => n + colW(s), 0), colsRW = cols.filter(s => s.side === "right").reduce((n, s) => n + colW(s), 0);
+  const rs = p.resources || {}, rp = rs.panel || {};
+  const resW = !noHeader && rp.show && (rs.series || []).length ? ((rp.width || 150) + (rp.table ? 96 : 0)) * (compact ? 0.8 : 1) : 0;
+  const ML = monW + (perSide === "left" ? perW : 0) + colsLW;
+  const MR = (perSide === "right" ? perW : 14) + (monSide !== "left" ? monW - 14 : 0) + colsRW + resW;
+  const W = Math.max(compact ? 300 : 700, width, compact ? 0 : ML + MR + 480), PW = Math.max(60, W - ML - MR);
+  // broken chainage: empty stretches between work areas are squeezed to a narrow gap with a break symbol
+  const cLo = Math.min(c.start_m, c.end_m), cHi = Math.max(c.start_m, c.end_m), span = (cHi - cLo) || 1;
+  const breaks = [];
+  for (const b of (c.breaks || []).map(b => [Math.max(cLo, Math.min(b.from_m, b.to_m)), Math.min(cHi, Math.max(b.from_m, b.to_m))]).filter(([a, b]) => b - a > 1e-6).sort((x, y) => x[0] - y[0])) {
+    const l = breaks[breaks.length - 1]; if (l && b[0] <= l[1]) l[1] = Math.max(l[1], b[1]); else breaks.push(b);
+  }
+  const BP = compact ? 12 : 18, live = Math.max(1e-6, span - breaks.reduce((n, [a, b]) => n + b - a, 0)), k = Math.max(1e-9, (PW - BP * breaks.length) / live);
+  const fwd = m => { let px = 0, prev = cLo; for (const [a, b] of breaks) { if (m <= a) return px + (m - prev) * k; px += (a - prev) * k; if (m < b) return px + BP * (m - a) / (b - a); px += BP; prev = b; } return px + (m - prev) * k; };
+  const inv = f => { let px = 0, prev = cLo; for (const [a, b] of breaks) { const pa = px + (a - prev) * k; if (f <= pa) return prev + (f - px) / k; if (f < pa + BP) return a + (b - a) * (f - pa) / BP; px = pa + BP; prev = b; } return prev + (f - px) / k; };
+  const X = m => ML + (c.reverse ? PW - fwd(m) : fwd(m));
+  const Xi = x => inv(c.reverse ? PW - (x - ML) : x - ML);
   const types = typeMap(p);
   // header rows: sections band, then location rows; a row that shows labels is tall enough for vertical text
   const nrows = Math.max(1, p.location_rows || 4);
@@ -27,7 +47,7 @@ export function geometry(p, { width = 1200, ppd = null, height = null, compact =
     const lab = p.locations.filter(l => rowOf(l) === r && l.label && l.ch_m >= c.start_m - 1 && l.ch_m <= c.end_m + 1);
     const any = p.locations.some(l => rowOf(l) === r);
     const longest = lab.reduce((m, l) => Math.max(m, (l.name || "").length + 9), 0);
-    rowH.push(noHeader || !any ? 0 : lab.length ? Math.min(compact ? 90 : 150, 18 + longest * (compact ? 4.6 : 5.6)) : 16);
+    rowH.push(noHeader || !any ? 0 : (lab.length ? Math.min(compact ? 90 : 150, 18 + longest * (compact ? 4.6 : 5.6)) : 16) * (lab.length ? squeeze : 1));
   }
   const SH = !noHeader && p.sections.length ? 30 : 0;
   const AX = 24;
@@ -39,21 +59,42 @@ export function geometry(p, { width = 1200, ppd = null, height = null, compact =
     const a = hi.fit === "full" ? L0 : X(hi.ch_start_m ?? c.start_m), b = hi.fit === "full" ? R0 : X(hi.ch_end_m ?? c.end_m);
     const w = Math.abs(b - a);
     const ih = hi.height_px > 0 ? hi.height_px * (compact ? 0.7 : 1) : w * ((hi.nat_h || 1) / (hi.nat_w || 1));
-    img = { x: Math.min(a, b), y: 6, w, h: Math.min(ih, compact ? 420 : 900) };
+    img = { x: Math.min(a, b), y: 6, w, h: Math.min(ih, compact ? 420 : 900) * squeeze };
   }
   const headTop = 6 + (img ? img.h + 6 : 0);
   const rowsTop = headTop + SH + 4;
-  const top = rowsTop + rowH.reduce((a, b) => a + b, 0) + AX;
+  // bands (long section, quantities, extents, plan, strips) above the chainage axis or below the chart
+  const bands = noHeader ? [] : (p.bands || []).filter(b => b.show !== false);
+  const bh = b => Math.max(16, bandHeight(b, compact) * squeeze);
+  const aboveTop = rowsTop + rowH.reduce((a, b) => a + b, 0);
+  const aboveH = bands.filter(b => b.position === "above").reduce((n, b) => n + bh(b) + 6, 0);
+  const axTop = c.axis !== "bottom", axBot = c.axis !== "top";
+  const top = aboveTop + aboveH + (axTop ? AX : 8);
   const t0 = tms(T.start), t1 = tms(T.finish) + DAY;
   const nd = Math.max(1, (t1 - t0) / DAY);
-  const bottomPad = 36;
+  const belowH = bands.filter(b => b.position !== "above").reduce((n, b) => n + bh(b) + 6, 0);
+  const bottomPad = (axBot ? 36 : 12) + belowH;
   let px = ppd || T.px_per_day || 2;
+  if (height && squeeze === 1 && top + bottomPad > height * 0.5) return geometry(p, { ...opts, squeeze: Math.max(0.25, (height * 0.5 - 40) / Math.max(1, top + bottomPad - 40)) });
   if (height) px = Math.max(0.05, (height - top - bottomPad) / nd);
   const GH = nd * px;
   const up = T.orientation === "up";
   const Y = ms => (up ? top + GH - ((ms - t0) / DAY) * px : top + ((ms - t0) / DAY) * px);
   const Yi = y => (up ? t0 + ((top + GH - y) / px) * DAY : t0 + ((y - top) / px) * DAY);
-  return { W, H: top + GH + bottomPad, ML, MR, PW, X, Xi, Y, Yi, top, GH, t0, t1, ppd: px, nd, SH, rowsTop, rowH, rowOf, headTop, AX, compact, img, noHeader, L: L0, R: R0 };
+  // where the side columns sit, and the x positions of the date columns
+  const colPos = []; let xl = ML - colsLW, xr = R0;
+  for (const s of cols) { const w = colW(s); if (s.side === "right") { colPos.push({ s, x: xr, w }); xr += w; } else { colPos.push({ s, x: xl, w }); xl += w; } }
+  const edgeL = ML - colsLW, edgeR = R0 + colsRW;
+  const xs = {
+    monL: monSide !== "right" ? edgeL - (perSide === "left" ? perW : 0) - 10 : null,
+    perL: perSide === "left" ? edgeL - 6 : null,
+    perR: perSide === "right" ? edgeR + 6 : null,
+    monR: monSide !== "left" ? edgeR + (perSide === "right" ? perW : 0) + 8 : null,
+    res: W - resW, resW,
+  };
+  const breakPx = breaks.map(([a, b]) => [a, b, X(a), X(b)]);
+  return { W, H: top + GH + bottomPad, ML, MR, PW, X, Xi, Y, Yi, top, GH, t0, t1, ppd: px, nd, SH, rowsTop, rowH, rowOf, headTop, AX, compact, img, noHeader, L: L0, R: R0,
+    cols: colPos, edgeL, edgeR, xs, breaks: breakPx, aboveTop, bands, bandH: bh, axTop, axBot, belowTop: top + GH + (axBot ? 34 : 10) };
 }
 
 // The symbol for a location on a header line at y = base (a..b is its extent for ranged locations).
@@ -112,13 +153,15 @@ export function areaPaint(st, col, defs) {
 }
 
 // ------------------------------------------------------------------ main chart
+let chartSeq = 0;
 export function renderChart(p, opts = {}) {
   const G = geometry(p, opts);
+  G.idp = `tc${++chartSeq}-`; // ids unique per chart, so several charts on one page keep their own clipping
   const { W, H, ML, X, Y, top, GH, t0, t1, L, R } = G;
   const c = p.chainage, S = styleMap(p), types = typeMap(p), view = p.view || {};
   const fs = G.compact ? 9 : 11;
   let o = `<defs>
-    <clipPath id="gridclip"><rect x="${L}" y="${top}" width="${R - L}" height="${GH}"/></clipPath>
+    <clipPath id="${G.idp}grid"><rect x="${L}" y="${top}" width="${R - L}" height="${GH}"/></clipPath>
     <pattern id="hatchA" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" stroke="${PAPER.hatch}" stroke-width="1.3"/></pattern>
   </defs>`;
   o += `<rect width="${W}" height="${H}" fill="${PAPER.sheet}"/>`;
@@ -127,11 +170,13 @@ export function renderChart(p, opts = {}) {
   if (G.img) {
     const hi = p.header_image;
     o += `<image href="${hi.data}" x="${G.img.x.toFixed(1)}" y="${G.img.y}" width="${G.img.w.toFixed(1)}" height="${G.img.h.toFixed(1)}" preserveAspectRatio="${hi.keep_ratio ? "xMidYMid meet" : "none"}" opacity="${hi.opacity ?? 1}" data-hdr="1"/>`;
+    o += headerPinsSvg(p, G);
   }
 
   // ---- header: sections
   if (!G.noHeader) p.sections.forEach((s, i) => {
-    const a = Math.min(X(s.from_m), X(s.to_m)), b = Math.max(X(s.from_m), X(s.to_m)), w = b - a, cx = (a + b) / 2;
+    const a = Math.max(L, Math.min(X(s.from_m), X(s.to_m))), b = Math.min(R, Math.max(X(s.from_m), X(s.to_m))), w = b - a, cx = (a + b) / 2;
+    if (w <= 0.5) return;
     o += `<rect x="${a}" y="${G.headTop}" width="${w}" height="${G.SH - 2}" fill="${i % 2 ? PAPER.band2 : PAPER.band}" stroke="${PAPER.rule}" stroke-width=".6"/>`;
     const nm = s.name.length * (fs * 0.55) < w - 6 ? s.name : w > 30 ? `S${i + 1}` : "";
     if (nm) o += T(cx, G.headTop + 13, nm, `text-anchor="middle" font-size="${fs}" font-weight="600" font-family="${FONT}"`, `fill:${PAPER.ink}`);
@@ -162,8 +207,11 @@ export function renderChart(p, opts = {}) {
     ry += rh;
   }
 
+  // ---- bands above the chainage axis
+  o += bandsSvg(p, G, "above");
   // ---- chainage axes
-  o += chainageAxis(p, G, top - 2, true) + chainageAxis(p, G, top + GH + 2, false);
+  if (G.axTop) o += chainageAxis(p, G, top - 2, true);
+  if (G.axBot) o += chainageAxis(p, G, top + GH + 2, false);
 
   // ---- grid background, weekends, weeks, months
   o += `<rect x="${L}" y="${top}" width="${R - L}" height="${GH}" fill="${PAPER.sheet}"/>`;
@@ -173,28 +221,48 @@ export function renderChart(p, opts = {}) {
   if (G.ppd >= 10) for (let d = t0; d <= t1; d += DAY) o += `<line x1="${L}" x2="${R}" y1="${Y(d)}" y2="${Y(d)}" stroke="${PAPER.rule}" stroke-width=".3"/>`;
   const wk0 = (() => { const d = new Date(t0); const back = (d.getUTCDay() - (p.time.week_start ?? 1) + 7) % 7; return t0 - back * DAY; })();
   const wstep = G.ppd * 7 >= 13 ? 1 : G.ppd * 7 >= 6 ? 2 : G.ppd * 7 >= 3 ? 4 : 8;
+  // period column: week numbers (project, ISO or week-start dates), months since the start, or project years
+  const per = p.time.period_labels || "weeks", xs = G.xs;
+  const perAt = (y, lab) => { if (xs.perR != null) o += T(xs.perR, y, lab, `font-size="${fs - 2}" font-family="${MONO}"`, `fill:${PAPER.muted}`);
+    if (xs.perL != null) o += T(xs.perL, y, lab, `text-anchor="end" font-size="${fs - 2}" font-family="${MONO}"`, `fill:${PAPER.muted}`); };
+  const origin = tms(p.time.period_origin || p.time.start);
   let wn = 0;
   for (let d = wk0; d <= t1; d += 7 * DAY, wn++) {
     if (d < t0) continue;
     o += `<line x1="${L}" x2="${R}" y1="${Y(d)}" y2="${Y(d)}" stroke="${PAPER.rule}" stroke-width="${G.ppd * 7 >= 6 ? 0.5 : 0.3}"/>`;
-    if (wn % wstep === 0 && d + 7 * DAY <= t1 + DAY) {
+    if (per === "weeks" && wn % wstep === 0 && d + 7 * DAY <= t1 + DAY) {
       const lab = p.time.week_labels === "iso" ? "W" + isoWeek(d) : p.time.week_labels === "date" ? niceDate(d, false) : "W" + (Math.floor((d - wk0) / (7 * DAY)) + 1);
-      o += T(R + 6, (Y(d) + Y(d + 7 * DAY)) / 2 + 3, lab, `font-size="${fs - 2}" font-family="${MONO}"`, `fill:${PAPER.muted}`);
+      perAt((Y(d) + Y(d + 7 * DAY)) / 2 + 3, lab);
+    }
+  }
+  if (per === "months" || per === "years") {
+    const od = new Date(origin);
+    for (let n = 0; n < 1200; n++) {
+      const a = per === "years" ? Date.UTC(od.getUTCFullYear() + n, od.getUTCMonth(), od.getUTCDate()) : Date.UTC(od.getUTCFullYear(), od.getUTCMonth() + n, od.getUTCDate());
+      const b = per === "years" ? Date.UTC(od.getUTCFullYear() + n + 1, od.getUTCMonth(), od.getUTCDate()) : Date.UTC(od.getUTCFullYear(), od.getUTCMonth() + n + 1, od.getUTCDate());
+      if (a >= t1) break; if (b <= t0) continue;
+      const ya = Y(Math.max(a, t0)), yb = Y(Math.min(b, t1));
+      if (per === "years") { [xs.perR != null ? xs.perR - 6 : null, xs.perL != null ? xs.perL - (fs * 4) : null].forEach(x0 => { if (x0 != null) o += `<line x1="${x0}" x2="${x0 + fs * 4 + 6}" y1="${Y(a)}" y2="${Y(a)}" stroke="${PAPER.muted}" stroke-width="1"/>`; }); }
+      if (Math.abs(yb - ya) >= 10) perAt((ya + yb) / 2 + 3, (per === "years" ? "Y" : "M") + (n + 1));
     }
   }
   const sd = new Date(t0); let m = Date.UTC(sd.getUTCFullYear(), sd.getUTCMonth(), 1), first = true;
+  const monAt = (x, anchor, y, s, attrs) => { if (x != null) o += T(x, y, s, `text-anchor="${anchor}" ${attrs}`, `fill:${attrs.includes(MONO) ? PAPER.muted : PAPER.ink}`); };
   while (m < t1) {
     const dt = new Date(m), next = Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth() + 1, 1);
-    if (m >= t0) o += `<line x1="${L - 8}" x2="${R}" y1="${Y(m)}" y2="${Y(m)}" stroke="${PAPER.muted}" stroke-opacity=".55" stroke-width="1"/>`;
+    if (m >= t0) o += `<line x1="${xs.monL != null ? L - 8 : L}" x2="${xs.monR != null ? R + 8 : R}" y1="${Y(m)}" y2="${Y(m)}" stroke="${PAPER.muted}" stroke-opacity=".55" stroke-width="1"/>`;
     const a = Math.max(m, t0), b = Math.min(next, t1), span = Math.abs(Y(b) - Y(a)), ym = Math.min(Y(a), Y(b));
     if (span >= 11) {
-      o += T(L - 10, ym + 11, MON[dt.getUTCMonth()], `text-anchor="end" font-size="${fs}" font-weight="600" font-family="${FONT}"`, `fill:${PAPER.ink}`);
-      if ((dt.getUTCMonth() === 0 || first) && span >= 22) o += T(L - 10, ym + 22, dt.getUTCFullYear(), `text-anchor="end" font-size="${fs - 2}" font-family="${MONO}"`, `fill:${PAPER.muted}`);
+      const ma = `font-size="${fs}" font-weight="600" font-family="${FONT}"`, ya = `font-size="${fs - 2}" font-family="${MONO}"`;
+      monAt(xs.monL, "end", ym + 11, MON[dt.getUTCMonth()], ma); monAt(xs.monR, "start", ym + 11, MON[dt.getUTCMonth()], ma);
+      if ((dt.getUTCMonth() === 0 || first) && span >= 22) { monAt(xs.monL, "end", ym + 22, dt.getUTCFullYear(), ya); monAt(xs.monR, "start", ym + 22, dt.getUTCFullYear(), ya); }
     }
     first = false; m = next;
   }
+  // side columns for work with no chainage (design, approvals, procurement), and the resource panel
+  o += sideColsSvg(p, G) + resourcesSvg(p, G);
 
-  o += `<g clip-path="url(#gridclip)">`;
+  o += `<g clip-path="url(#${G.idp}grid)">`;
   // ---- section boundaries and location grid lines
   if (view.show_location_grid !== false) {
     p.sections.forEach(s => [s.from_m, s.to_m].forEach(v => { o += `<line x1="${X(v)}" x2="${X(v)}" y1="${top}" y2="${top + GH}" stroke="${PAPER.muted}" stroke-opacity=".35" stroke-width="1"/>`; }));
@@ -205,12 +273,25 @@ export function renderChart(p, opts = {}) {
       o += `<line x1="${x}" x2="${x}" y1="${top}" y2="${top + GH}" stroke="${col}" stroke-opacity=".7" stroke-width=".9" ${l.type === "limit" ? "" : 'stroke-dasharray="3 3"'}/>`;
     });
   }
+  // ---- chainage breaks: the squeezed gap is shaded with a zigzag at each edge
+  for (const [, , xa, xb] of G.breaks) {
+    o += `<rect x="${Math.min(xa, xb)}" y="${top}" width="${Math.abs(xb - xa)}" height="${GH}" fill="${PAPER.band2}"/>`;
+    [xa, xb].forEach(x => { o += `<line x1="${x}" x2="${x}" y1="${top}" y2="${top + GH}" stroke="${PAPER.muted}" stroke-width=".8"/>`; });
+  }
+  // ---- the chainage scale repeated part-way down a long chart
+  if (+p.chainage.repeat_days > 0) for (let d = t0 + p.chainage.repeat_days * DAY; d < t1 - 20 * DAY; d += p.chainage.repeat_days * DAY) o += chainageAxis(p, G, Y(d), false, true);
   // ---- time markers
   if (view.show_time_markers !== false) p.time_markers.forEach(mk => {
     const a = mk.ch0_m != null ? X(mk.ch0_m) : L, b = mk.ch1_m != null ? X(mk.ch1_m) : R, xa = Math.min(a, b), xb = Math.max(a, b);
     const ys = Y(tms(mk.start)), col = mk.colour || PAPER.muted, sel = opts.selection?.kind === "mk" && opts.selection.id === mk.id;
     let g = `<g data-mk="${mk.id}" class="mk"><title>${esc(mk.label)} · ${niceDate(tms(mk.start))}${mk.finish ? " – " + niceFinish(tms(mk.finish)) : ""}</title>`;
-    if (mk.kind === "milestone" || !mk.finish) {
+    if ((mk.kind === "milestone" || !mk.finish) && mk.label_style === "boxed") {
+      // a solid line across with the label in a box in the middle (award, site access, completion)
+      const bw = Math.min(xb - xa - 10, (mk.label || "").length * (fs + 2) * 0.56 + 20), bx = (xa + xb) / 2 - bw / 2;
+      g += `<line x1="${xa}" x2="${xb}" y1="${ys}" y2="${ys}" stroke="${col}" stroke-width="${sel ? 3.4 : 2}"/>`;
+      g += `<rect x="${bx}" y="${ys - fs - 2}" width="${bw}" height="${2 * fs + 4}" rx="2" fill="${PAPER.sheet}" stroke="${sel ? PAPER.sel : col}" stroke-width="${sel ? 2.5 : 1.2}"/>`;
+      g += T((xa + xb) / 2, ys + fs * 0.38, mk.label, `text-anchor="middle" font-size="${fs + 2}" font-weight="700" font-family="${FONT}"`, `fill:${col}`);
+    } else if (mk.kind === "milestone" || !mk.finish) {
       g += `<line x1="${xa}" x2="${xb}" y1="${ys}" y2="${ys}" stroke="${col}" stroke-width="${sel ? 3 : 1.4}" stroke-dasharray="8 4"/>`;
       g += `<rect x="${xa}" y="${ys - 5}" width="${xb - xa}" height="10" fill="transparent"/>`;
       g += `<path d="M${xa + 8} ${ys - 6} l6 6 l-6 6 l-6 -6z" fill="${col}"/>`;
@@ -226,12 +307,12 @@ export function renderChart(p, opts = {}) {
 
   // ---- activities
   const main = view.main_dataset, cmp = view.compare_dataset;
-  const visible = a => a.dataset === main || (cmp && a.dataset === cmp);
+  const visible = a => (a.dataset === main || (cmp && a.dataset === cmp)) && onChart(p, a);
   const acts = p.activities.filter(visible);
   const ghostActs = acts.filter(a => a.dataset !== main), mainActs = acts.filter(a => a.dataset === main);
-  const kindOrder = { block: 0, cut: 0, fill: 0, bar: 1, line: 2, milestone: 3 };
+  const kindOrder = { block: 0, cut: 0, fill: 0, taper: 0, bar: 1, line: 2, milestone: 3 };
   mainActs.sort((a, b) => (kindOrder[S[a.style]?.kind] ?? 2) - (kindOrder[S[b.style]?.kind] ?? 2));
-  const geo = a => ({ x0: X(a.ch0_m), x1: X(a.ch1_m), y0: Y(tms(a.start)), y1: Y(tms(a.finish)) });
+  const geo = a => actGeo(p, G, a);
   const actStart = o.length; // activity markup from here on is drawn twice during playback
   // footprints underneath everything
   if (view.show_footprints !== false) mainActs.forEach(a => {
@@ -260,6 +341,12 @@ export function renderChart(p, opts = {}) {
       if (sel) s += `<rect x="${xx - 4}" y="${ya - 4}" width="${w + 8}" height="${hh + 8}" fill="none" stroke="${PAPER.sel}" stroke-width="2.5"/>`;
       if (!ghost) s += `<rect x="${xx}" y="${ya}" width="${w}" height="${hh}" fill="transparent"/>`;
       s += `<path d="${triPath(kind, xx, ya, w, hh)}" ${areaPaint(st, col, pdefs)} stroke="${col}" stroke-width="${st.width || 1.2}" stroke-linejoin="round" ${dashOf(st.dash)}/>`;
+    } else if (kind === "taper") {
+      // an area whose chainage range changes over time: start range at the start date, finish range at the finish date
+      const f0 = X(a.fin_ch0_m ?? a.ch0_m) + (g.dx || 0), f1 = X(a.fin_ch1_m ?? a.ch1_m) + (g.dx || 0);
+      const pts = `${g.x0.toFixed(1)},${g.y0.toFixed(1)} ${g.x1.toFixed(1)},${g.y0.toFixed(1)} ${f1.toFixed(1)},${g.y1.toFixed(1)} ${f0.toFixed(1)},${g.y1.toFixed(1)}`;
+      if (sel) s += `<polygon points="${pts}" fill="none" stroke="${PAPER.sel}" stroke-width="5" stroke-linejoin="round"/>`;
+      s += `<polygon points="${pts}" ${areaPaint(st, col, pdefs)} stroke="${col}" stroke-width="${st.width || 1.2}" stroke-linejoin="round" ${dashOf(st.dash)}/>`;
     } else if (kind === "milestone") {
       if (Math.abs(g.x1 - g.x0) > 2) s += `<line x1="${g.x0}" x2="${g.x1}" y1="${g.y0}" y2="${g.y0}" stroke="${col}" stroke-width="${st.width || 2}" ${dashOf(st.dash)}/>`;
       s += `<path d="M${g.x0} ${g.y0 - 7} l7 7 l-7 7 l-7 -7z" fill="${col}" stroke="${sel ? PAPER.sel : PAPER.sheet}" stroke-width="${sel ? 2.5 : 1}"/>`;
@@ -282,14 +369,19 @@ export function renderChart(p, opts = {}) {
     const byCode = new Map(mainActs.map(a => [a.code, a]));
     const end = (a, fin) => { const g = geo(a), k = (S[a.style] || {}).kind || "line"; return AREA.has(k) ? [(g.x0 + g.x1) / 2, fin ? g.y1 : g.y0] : fin ? [g.x1, g.y1] : [g.x0, g.y0]; };
     let lk = "";
+    const flt = view.link_filter || "all", elbow = view.link_route === "elbow", crit = x => !!(x.p6?.driving || x.ms?.critical);
     for (const a of mainActs) for (const l of a.links || []) {
       const b = byCode.get(l.code); if (!b) continue;
+      if (flt === "driving" && !(crit(a) && crit(b))) continue;
+      if (flt === "cross" && a.style === b.style) continue;
       const ty = (l.type || "FS").toUpperCase(), [xa, ya] = end(b, ty[0] === "F"), [xb, yb] = end(a, ty[1] === "F");
       if (Math.hypot(xb - xa, yb - ya) < 3) continue;
-      lk += `<line x1="${xa.toFixed(1)}" y1="${ya.toFixed(1)}" x2="${xb.toFixed(1)}" y2="${yb.toFixed(1)}" stroke="${PAPER.link}" stroke-width="${l.driving ? 1.6 : 0.9}" stroke-opacity=".75" marker-end="url(#lkarrow)"><title>${esc(b.code)} → ${esc(a.code)} · ${ty}${l.lag_days ? ` lag ${l.lag_days} d` : ""}</title></line>`;
+      const d = elbow ? `M${xa.toFixed(1)} ${ya.toFixed(1)}H${xb.toFixed(1)}V${yb.toFixed(1)}` : `M${xa.toFixed(1)} ${ya.toFixed(1)}L${xb.toFixed(1)} ${yb.toFixed(1)}`;
+      lk += `<path d="${d}" fill="none" stroke="${PAPER.link}" stroke-width="${crit(a) && crit(b) ? 1.5 : 0.9}" stroke-opacity=".75" marker-end="url(#lkarrow)"><title>${esc(b.code)} → ${esc(a.code)} · ${ty}${l.lag_days ? ` lag ${l.lag_days} d` : ""}</title></path>`;
     }
     if (lk) o += `<defs><marker id="lkarrow" viewBox="0 0 8 8" refX="7.5" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L8 4L0 8z" fill="${PAPER.link}"/></marker></defs><g class="links" pointer-events="none">${lk}</g>`;
   }
+  o += overlaysSvg(p, G, mainActs, opts.selection);
   // labels on top
   labels.forEach(({ a, g, st, lab, kind, col }) => {
     const text = labelText(lab.text || "{name}", a, p, st.name);
@@ -338,7 +430,7 @@ export function renderChart(p, opts = {}) {
 }
 
 // Kinds drawn as an area over their chainage and dates (static, no moving front)
-export const AREA = new Set(["block", "cut", "fill"]);
+export const AREA = new Set(["block", "cut", "fill", "taper"]);
 // Right-angle triangles on a flat base. Cut ◣: the slope falls left to right. Fill ◢: the slope rises left to right.
 export function triPath(kind, x, y, w, h) {
   const X0 = x.toFixed(1), X1 = (x + w).toFixed(1), Y0 = y.toFixed(1), Y1 = (y + h).toFixed(1);
@@ -427,26 +519,39 @@ export function isStoodDown(p, a, t) {
 export function activeAt(p, t) {
   const out = [];
   for (const a of p.activities) {
-    if (a.dataset !== p.view.main_dataset) continue;
+    if (a.dataset !== p.view.main_dataset || !onChart(p, a)) continue;
     const { s, f } = progressInfo(p, a);
     if (t >= s && t <= f && f > s) out.push({ a, frac: progressAt(p, a, t), paused: isStoodDown(p, a, t) });
   }
   return out;
 }
 
-export function chainageAxis(p, G, y, topSide) {
+export function chainageAxis(p, G, y, topSide, inline = false) {
   const c = p.chainage, fs = G.compact ? 9 : 10.5;
-  let o = `<line x1="${G.L}" x2="${G.R}" y1="${y}" y2="${y}" stroke="${PAPER.muted}"/>`;
-  const step = c.minor_m > 0 ? c.minor_m : c.major_m > 0 ? c.major_m : (c.end_m - c.start_m) / 10;
-  const n0 = Math.ceil(c.start_m / step - 1e-9), n1 = Math.floor(c.end_m / step + 1e-9);
-  if (n1 - n0 > 800) return o;
-  const dir = topSide ? -1 : 1;
-  for (let n = n0; n <= n1; n++) {
-    const m = n * step, x = G.X(m), maj = c.major_m > 0 && Math.abs(m / c.major_m - Math.round(m / c.major_m)) < 1e-6;
-    o += `<line x1="${x}" x2="${x}" y1="${y}" y2="${y + dir * (maj ? 7 : 3.5)}" stroke="${PAPER.muted}"/>`;
-    if (maj) o += T(x, topSide ? y - 10 : y + 19, chFmt(p, m).replace(/\.0+$/, ""), `text-anchor="middle" font-size="${fs}" font-family="${MONO}"`, `fill:${PAPER.muted}`);
+  let o = inline ? "" : `<line x1="${G.L}" x2="${G.R}" y1="${y}" y2="${y}" stroke="${PAPER.muted}"/>`;
+  const lo = Math.min(c.start_m, c.end_m), hi = Math.max(c.start_m, c.end_m);
+  const step = c.minor_m > 0 ? c.minor_m : c.major_m > 0 ? c.major_m : (hi - lo) / 10;
+  const n0 = Math.ceil(lo / step - 1e-9), n1 = Math.floor(hi / step + 1e-9);
+  const inBreak = m => G.breaks.some(([a, b]) => m > a + 1e-6 && m < b - 1e-6);
+  const dir = topSide ? -1 : 1, lab = (x, m) => T(x, topSide ? y - 10 : y + (inline ? 12 : 19), chFmt(p, m).replace(/\.0+$/, ""), `text-anchor="middle" font-size="${inline ? fs - 1 : fs}" font-family="${MONO}" ${inline ? halo : ""}`, `fill:${PAPER.muted}`);
+  if (n1 - n0 <= 800) for (let n = n0; n <= n1; n++) {
+    const m = n * step; if (inBreak(m)) continue;
+    const nearBreak = G.breaks.some(([, , xa, xb]) => Math.abs(G.X(m) - xa) < 26 || Math.abs(G.X(m) - xb) < 26);
+    const x = G.X(m), maj = c.major_m > 0 && Math.abs(m / c.major_m - Math.round(m / c.major_m)) < 1e-6;
+    if (!inline || maj) o += `<line x1="${x}" x2="${x}" y1="${y}" y2="${y + dir * (maj ? 7 : 3.5)}" stroke="${PAPER.muted}"/>`;
+    if (maj && !nearBreak) o += lab(x, m);
   }
-  o += T(G.L - 10, topSide ? y - 10 : y + 19, (c.prefix ? c.prefix + " " : "") + chUnitLabel(p), `text-anchor="end" font-size="${fs - 1}" font-family="${MONO}"`, `fill:${PAPER.muted}`);
+  // at a break: the chainage either side, and a double slash on the axis
+  for (const [a, b, xa, xb] of G.breaks) {
+    if (!inline) o += `<rect x="${Math.min(xa, xb) + 1}" y="${y - 6}" width="${Math.max(0, Math.abs(xb - xa) - 2)}" height="12" fill="${PAPER.sheet}"/>` +
+      `<path d="M${Math.min(xa, xb) + 2} ${y + 6}l5 -12M${Math.max(xa, xb) - 7} ${y + 6}l5 -12" stroke="${PAPER.ink}" stroke-width="1.4"/>`;
+    o += T(Math.min(xa, xb) - 2, topSide ? y - 10 : y + 19, chFmt(p, c.reverse ? b : a).replace(/\.0+$/, ""), `text-anchor="end" font-size="${fs - 1}" font-family="${MONO}"`, `fill:${PAPER.ink}`);
+    o += T(Math.max(xa, xb) + 2, topSide ? y - 10 : y + 19, chFmt(p, c.reverse ? a : b).replace(/\.0+$/, ""), `font-size="${fs - 1}" font-family="${MONO}"`, `fill:${PAPER.ink}`);
+  }
+  // chainage equations: where the kilometrage jumps
+  for (const e of c.equations || []) { if (e.at_m < lo || e.at_m > hi) continue; const x = G.X(e.at_m);
+    o += `<line x1="${x}" x2="${x}" y1="${y - 9}" y2="${y + 9}" stroke="#C00000" stroke-width="1.6"/>`; }
+  if (!inline) o += T(G.edgeL - 10, topSide ? y - 10 : y + 19, (c.prefix ? c.prefix + " " : "") + chUnitLabel(p), `text-anchor="end" font-size="${fs - 1}" font-family="${MONO}"`, `fill:${PAPER.muted}`);
   return o;
 }
 
@@ -469,6 +574,7 @@ export function renderLegend(p, { width = 220, size = 11, title = "Legend" } = {
   const ldefs = new Map();
   styles.forEach(s => row(cy => s.kind === "block" ? `<rect x="2" y="${cy - 5}" width="24" height="10" ${areaPaint(s, s.colour, ldefs)} stroke="${s.colour}"/>`
     : s.kind === "cut" || s.kind === "fill" ? `<path d="${triPath(s.kind, 4, cy - 7, 20, 14)}" ${areaPaint(s, s.colour, ldefs)} stroke="${s.colour}" stroke-linejoin="round"/>`
+    : s.kind === "taper" ? `<path d="M4 ${cy - 6}H16L26 ${cy + 6}H8Z" ${areaPaint(s, s.colour, ldefs)} stroke="${s.colour}" stroke-linejoin="round"/>`
     : s.kind === "milestone" ? `<path d="M14 ${cy - 6} l6 6 l-6 6 l-6 -6z" fill="${s.colour}"/>`
     : `<line x1="2" x2="26" y1="${cy + 4}" y2="${cy - 4}" stroke="${s.colour}" stroke-width="${Math.min(5, s.width || 3)}" ${dashOf(s.dash)} ${s.kind === "bar" ? 'stroke-opacity=".55"' : ""}/>` + marksSvg(s.marks, 2, cy + 4, 26, cy - 4, s.colour, Math.min(3, s.width || 3), 9), s.name));
   if (mk.length || ltypes.length) y += 6;

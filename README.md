@@ -50,7 +50,13 @@ Then open http://localhost:8765. The Python server in `server/` also offers the 
 | Corridor view: during playback, crews move along lanes by chainage above the chart, the track line fills in by stage, crews pause on stand-downs (optional), and video export can include it | done |
 | Branding: a library of company brands (logo, name, colours) kept in the browser; each project keeps a copy, used in the app bar, page title block, logo image blocks, video title strip and a logo / project-name intro and outro with fades | done |
 | Video intro / outro settings (on/off, length, background, title, subtitle, closing line) and music (any audio file, volume, fades, start point, loops to length; AAC in the MP4) | done |
-| Improvement roadmap from a review of real tender diagrams: [docs/ROADMAP.md](docs/ROADMAP.md) | |
+| Chart layout: axes top / bottom / both, repeated scale, month and period columns (weeks, M1…, Y1…), broken chainage, chainage equations, side columns for work with no chainage, lines / tracks, crew steps, link routing | done |
+| Tapered areas, text notes, haul arrows, boxed milestone labels, progress (as-built) lines, pins on the header image | done |
+| Bands above and below the chart: long section with cut / fill, quantities by section, package extents, schematic plan, strips | done |
+| Resource histogram beside the chart (from P6 assignments or pasted), with weekly and running totals | done |
+| Page layout: summary and calendar blocks, several charts per sheet (each with its own stretch and option), scale note | done |
+| Microsoft Project XML import (custom fields, styles from task names, links); rate sheet to a sketch data set; links in XER export and Excel import | done |
+| Feature list and what is left: [docs/ROADMAP.md](docs/ROADMAP.md) | |
 | Live P6 connection (EPPM web services, Primavera Cloud REST, P6 Pro database) | next phase |
 
 ## Units (metric and US)

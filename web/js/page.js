@@ -1,12 +1,13 @@
 // Page layout: paper, margins and placed blocks (title, title block, chart, legend, text). Used for print and export.
-import { renderChart, renderLegend, PAPER } from "./render.js";
-import { esc, h, $, $$, download, niceDate, tms, clamp, uid } from "./util.js";
+import { renderChart, renderLegend, geometry, PAPER, FONT as CHART_FONT } from "./render.js";
+import { rowsOf } from "./extras.js";
+import { esc, h, $, $$, download, niceDate, tms, clamp, uid, chToM, mToCh, lenFmt, DAY, MON } from "./util.js";
 import { readImage } from "./dialogs.js";
 import { logoSvg, logoWidth } from "./brand.js";
 
 export const PAPERS = { A4: [297, 210], A3: [420, 297], A2: [594, 420], A1: [841, 594], A0: [1189, 841], Letter: [279, 216], Ledger: [432, 279], "ANSI D": [864, 559] };
 const UNITS_PER_MM = 3.5; // drawing units per millimetre inside placed blocks (sets text size on paper)
-const FONT = "IBM Plex Sans Condensed, Arial Narrow, Arial, sans-serif";
+const FONT = CHART_FONT;
 
 export function paperSize(pg) {
   const [a, b] = PAPERS[pg.paper] || PAPERS.A3;
@@ -16,7 +17,7 @@ export function paperSize(pg) {
 function fillText(t, p) {
   const m = p.meta || {};
   return String(t || "").replace(/\{(\w+)\}/g, (x, k) => ({ title: m.title || p.name, subtitle: m.subtitle, client: m.client, contract: m.contract, revision: m.revision,
-    author: m.author, date: niceDate(Date.now()), project: p.name, company: (p.brand && p.brand.name) || "", dataset: (p.datasets.find(d => d.id === p.view.main_dataset) || {}).name }[k] ?? x));
+    author: m.author, date: niceDate(Date.now()), project: p.name, company: (p.brand && p.brand.name) || "", dataset: (p.datasets.find(d => d.id === p.view.main_dataset) || {}).name, scale: chartScale(p) }[k] ?? x));
 }
 
 // Full page as SVG in millimetres.
@@ -31,7 +32,8 @@ export function renderPage(p, { selected = null, forPrint = false } = {}) {
     const U = UNITS_PER_MM, iw = w * U, ih = hh * U;
     o += `<g data-block="${b.id}">`;
     if (b.kind === "chart") {
-      const { svg } = renderChart(p, { width: iw - 8, height: ih - 8, compact: iw < 1400 });
+      const { svg } = renderChart(chartProject(p, b), { width: iw - 8, height: ih - 8, compact: iw < 1400 });
+      if (b.caption) o += `<text x="${x + 2}" y="${y + 4}" font-size="3" font-weight="700" fill="#18262B">${esc(fillText(b.caption, p))}</text>`;
       o += `<svg x="${x + 1}" y="${y + 1}" width="${w - 2}" height="${hh - 2}" viewBox="0 0 ${iw - 8} ${ih - 8}" preserveAspectRatio="xMidYMid meet">${svg}</svg>`;
     } else if (b.kind === "legend") {
       const lg = renderLegend(p, { width: iw, size: b.font_size || 11 });
@@ -45,7 +47,7 @@ export function renderPage(p, { selected = null, forPrint = false } = {}) {
       else if (!forPrint) o += `<text x="${x + w / 2}" y="${y + hh / 2}" font-size="3" text-anchor="middle" fill="#9AA5A8">Choose an image in the panel</text>`;
     } else if (b.kind === "titleblock") {
       const m = p.meta, cells = [["Project", m.title || p.name], ["Client", m.client], ["Contract", m.contract], ["Option", (p.datasets.find(d => d.id === p.view.main_dataset) || {}).name],
-        ["Revision", m.revision], ["Prepared by", m.author], ["Date", niceDate(Date.now())], ["Sheet", `${pg.paper} ${pg.orientation}`]];
+        ["Revision", m.revision], ["Prepared by", m.author], ["Date", niceDate(Date.now())], ["Scale", chartScale(p) || `${pg.paper} ${pg.orientation}`]];
       // the brand logo takes a cell on the left of the title block
       const lw = p.brand && p.brand.logo ? Math.min(w * 0.3, logoWidth(p.brand, hh - 3) + 3) : 0;
       if (lw) { o += `<rect x="${x}" y="${y}" width="${lw}" height="${hh}" fill="#fff" stroke="#18262B" stroke-width=".2"/>` + logoSvg(p.brand, x + 1.5, y + 1.5, lw - 3, hh - 3, "center"); }
@@ -56,6 +58,10 @@ export function renderPage(p, { selected = null, forPrint = false } = {}) {
         o += `<text x="${cx + 1.2}" y="${cy + Math.min(2.6, rh * .35)}" font-size="${Math.min(1.9, rh * .28)}" fill="#5D6B70" letter-spacing=".1">${esc(k.toUpperCase())}</text>`;
         o += `<text x="${cx + 1.2}" y="${cy + rh - Math.min(1.4, rh * .2)}" font-size="${Math.min(3.4, rh * .45)}" fill="#18262B">${esc(clip(v || "", cw / (Math.min(3.4, rh * .45) * .5)))}</text>`;
       });
+    } else if (b.kind === "summary") {
+      o += summaryBlock(p, b, x, y, w, hh);
+    } else if (b.kind === "calendar") {
+      o += calendarBlock(p, b, x, y, w, hh);
     } else {
       const L = layoutText(b, p, w, hh);
       let ty = y + PAD;
@@ -88,7 +94,7 @@ const clip = (s, n) => (String(s).length > n ? String(s).slice(0, Math.max(1, Ma
 // ------------------------------------------------------------------ text blocks: heading, word wrap, shrink to fit
 const PAD = 1.5, LINE = 1.25, PT = 0.3528; // mm padding, line spacing, mm per point
 const overflow = {}; // block id -> lines that did not fit at the last draw
-const KIND_NAMES = { text: "Text", title: "Title", legend: "Legend", titleblock: "Title block", chart: "Chart", image: "Image" };
+const KIND_NAMES = { text: "Text", title: "Title", legend: "Legend", titleblock: "Title block", chart: "Chart", image: "Image", summary: "Summary", calendar: "Calendar" };
 export const blockName = b => (b.title || "").trim() || KIND_NAMES[b.kind] || b.kind;
 let measureCtx = null;
 function textWidthMm(s, sizeMm, bold) {
@@ -187,13 +193,34 @@ export function pageView(app) {
           : b.shrink && L.shrunkPt < (b.font_size || 12) ? `Text shrunk to ${L.shrunkPt} pt to fit.` : "Text wraps to the block width. Start a new line with Enter."));
       }
       if (b.kind === "legend") panel.append(lbl("Text size", numEl(b.font_size || 11, v => upd("font_size", v))));
+      if (b.kind === "chart") {
+        const p = app.p;
+        panel.append(h("p", { class: "hint" }, "Each chart block can show its own stretch and option, so one sheet can hold the whole scope and regional close-ups."),
+          h("div", { class: "row2" }, lbl("From (blank = project start)", h("input", { value: b.ch_from == null ? "" : mToCh(p, b.ch_from), onchange: e => upd("ch_from", e.target.value === "" ? null : chToM(p, e.target.value)) })),
+            lbl("To (blank = project end)", h("input", { value: b.ch_to == null ? "" : mToCh(p, b.ch_to), onchange: e => upd("ch_to", e.target.value === "" ? null : chToM(p, e.target.value)) }))),
+          lbl("Option shown", selKV([["", "The one on screen"], ...p.datasets.map(d => [d.id, d.name])], b.dataset || "", v => upd("dataset", v || null))),
+          lbl("Caption", h("input", { value: b.caption || "", placeholder: "e.g. Northern region", onchange: e => upd("caption", e.target.value) })),
+          h("label", { class: "chk" }, h("input", { type: "checkbox", checked: !!b.no_bands, onchange: e => upd("no_bands", e.target.checked) }), " Leave out the bands"),
+          h("label", { class: "chk" }, h("input", { type: "checkbox", checked: !!b.no_side, onchange: e => upd("no_side", e.target.checked) }), " Leave out side columns and the resource panel"));
+      }
+      if (b.kind === "summary") {
+        const on = new Set(b.metrics || SUMMARY_DEFAULT);
+        panel.append(h("p", { class: "hint" }, "Totals worked out from the project. Tick what to show."),
+          ...Object.entries(SUMMARY).map(([k, d]) => h("label", { class: "chk" }, h("input", { type: "checkbox", checked: on.has(k), onchange: e => { e.target.checked ? on.add(k) : on.delete(k); upd("metrics", [...on]); } }), " " + d.name)),
+          lbl("Text size (pt)", numEl(b.font_size || 9, v => upd("font_size", v))));
+      }
+      if (b.kind === "calendar") {
+        panel.append(h("p", { class: "hint" }, "Months of the programme with non-working days (from the working days per week) and stand-downs shaded."),
+          h("div", { class: "row2" }, lbl("First month", h("input", { type: "month", value: (b.from || app.p.time.start || "").slice(0, 7), onchange: e => upd("from", e.target.value) })),
+            lbl("Months", numEl(b.months || 12, v => upd("months", clamp(Math.round(v), 1, 48))))));
+      }
       if (b.kind === "image") panel.append(h("label", { class: "chk" }, h("input", { type: "checkbox", checked: !!b.brand_logo, onchange: e => upd("brand_logo", e.target.checked) }), " Use the project's brand logo (changes with the branding)"));
       if (b.kind === "image" && !b.brand_logo) panel.append(lbl("Image (logo, key plan…)", h("input", { type: "file", accept: "image/png,image/jpeg,image/gif,image/webp,image/svg+xml",
         onchange: async e => { try { const im = await readImage(e.target.files[0]); upd("data", im.data); } catch (err) { app.toast(err.message); } } })));
       panel.append(h("div", { class: "btns" }, h("button", { type: "button", class: "danger", onclick: () => { app.commit(); pg.blocks = pg.blocks.filter(x => x !== b); sel = null; app.changed(false); draw(); } }, "Delete block")));
     }
     panel.append(h("div", { class: "btns" },
-      ...["text", "image", "legend", "titleblock", "chart"].map(k => h("button", { type: "button", onclick: () => { app.commit(); const nb = { id: uid("b"), kind: k, x: .3, y: .3, w: .25, h: .15, text: k === "text" ? "Text" : "", font_size: 11, border: true }; pg.blocks.push(nb); sel = nb.id; app.changed(false); draw(); } }, `Add ${k}`))));
+      ...["text", "image", "legend", "titleblock", "chart", "summary", "calendar"].map(k => h("button", { type: "button", onclick: () => { app.commit(); const nb = { id: uid("b"), kind: k, x: .3, y: .3, w: .25, h: .15, text: k === "text" ? "Text" : "", font_size: 11, border: true }; pg.blocks.push(nb); sel = nb.id; app.changed(false); draw(); } }, `Add ${k}`))));
     panel.append(h("h3", {}, "Output"), h("div", { class: "btns" },
       h("button", { type: "button", class: "primary", onclick: () => printPage(app.p) }, "Print…"),
       h("button", { type: "button", onclick: () => download(`${slug(app.p.name)}.svg`, renderPage(app.p, { forPrint: true }), "image/svg+xml") }, "Export SVG"),
@@ -222,6 +249,7 @@ export function pageView(app) {
 }
 
 const lbl = (t, input) => h("label", { class: "fld" }, h("span", {}, t), input);
+const selKV = (opts, v, on) => { const s = h("select", { onchange: e => on(e.target.value) }); opts.forEach(([k, t]) => s.append(h("option", { value: k }, t))); s.value = v; return s; };
 const selEl = (opts, v, on) => { const s = h("select", { onchange: e => on(e.target.value) }); opts.forEach(o => s.append(h("option", { value: o }, o))); s.value = v; return s; };
 const numEl = (v, on) => h("input", { type: "number", step: "any", value: v, onchange: e => { const n = parseFloat(e.target.value); if (!isNaN(n)) on(n); } });
 const slug = s => String(s).replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "") || "time_chainage";
@@ -246,4 +274,75 @@ export async function exportPng(p, dpi = 200) {
   ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, pxW, pxH); ctx.drawImage(img, 0, 0, pxW, pxH);
   URL.revokeObjectURL(url);
   cv.toBlob(b => download(`${slug(p.name)}.png`, b, "image/png"), "image/png");
+}
+
+// ------------------------------------------------------------------ chart blocks, scale, summary and calendar
+// A chart block can show its own stretch of chainage and its own option (data set).
+export function chartProject(p, b) {
+  if (b.ch_from == null && b.ch_to == null && !b.dataset && !b.no_bands && !b.no_side) return p;
+  let c = { ...p.chainage, start_m: b.ch_from ?? p.chainage.start_m, end_m: b.ch_to ?? p.chainage.end_m };
+  if (!(c.end_m > c.start_m)) c = p.chainage;
+  return { ...p, chainage: c, bands: b.no_bands ? [] : p.bands, side_cols: b.no_side ? (p.side_cols || []).map(c => ({ ...c, show: false })) : p.side_cols,
+    resources: b.no_side && p.resources ? { ...p.resources, panel: { ...(p.resources.panel || {}), show: false } } : p.resources,
+    view: { ...p.view, main_dataset: b.dataset || p.view.main_dataset, compare_dataset: b.dataset ? null : p.view.compare_dataset } };
+}
+// "Approx. scale at A3: 10 mm = 200 m", from the first chart block on the page
+export function chartScale(p) {
+  const pg = p.page, b = (pg.blocks || []).find(x => x.kind === "chart"); if (!b) return "";
+  const [PWmm] = paperSize(pg), mg = pg.margins_mm, wmm = b.w * (PWmm - mg.left - mg.right) - 2, iw = b.w * (PWmm - mg.left - mg.right) * UNITS_PER_MM;
+  const q = chartProject(p, b), G = geometry(q, { width: iw - 8, height: 1000, compact: iw < 1400 });
+  const live = Math.abs(q.chainage.end_m - q.chainage.start_m) - G.breaks.reduce((n, [a, c]) => n + (c - a), 0);
+  const gridMm = (G.PW - G.breaks.length * (G.compact ? 12 : 18)) / (iw - 8) * wmm; if (!(gridMm > 0) || !(live > 0)) return "";
+  const per10 = live / gridMm * 10, mag = 10 ** Math.floor(Math.log10(per10)), nice = [1, 2, 2.5, 5, 10].map(k => k * mag).reduce((a, c) => (Math.abs(c - per10) < Math.abs(a - per10) ? c : a));
+  return `Approx. ${pg.paper}: 10 mm = ${lenFmt(p, nice)}`;
+}
+
+const SUMMARY = {
+  span: { name: "Programme start and finish" }, count: { name: "Number of activities" }, length: { name: "Length of work by style" },
+  qty: { name: "Quantities by unit" }, locations: { name: "Locations by type" }, bands: { name: "Totals from quantity bands" },
+};
+const SUMMARY_DEFAULT = ["span", "count", "qty", "bands"];
+export function summaryRows(p, metrics = SUMMARY_DEFAULT) {
+  const acts = p.activities.filter(a => a.dataset === p.view.main_dataset), rows = [];
+  const S = Object.fromEntries(p.styles.map(s => [s.code, s]));
+  for (const k of metrics) {
+    if (k === "span" && acts.length) { rows.push(["Start", niceDate(Math.min(...acts.map(a => tms(a.start))))], ["Finish", niceDate(Math.max(...acts.map(a => tms(a.finish))) - 6e4)]); }
+    if (k === "count") rows.push(["Activities", acts.length.toLocaleString()]);
+    if (k === "length") { const m = new Map(); acts.forEach(a => { const st = S[a.style]; if (!st || st.kind === "milestone") return; m.set(st.name, (m.get(st.name) || 0) + Math.abs(a.ch1_m - a.ch0_m)); }); [...m].sort((a, b) => b[1] - a[1]).forEach(([n, v]) => v > 0 && rows.push([n, lenFmt(p, v)])); }
+    if (k === "qty") { const m = new Map(); acts.forEach(a => { if (a.qty && a.qty_unit) m.set(a.qty_unit, (m.get(a.qty_unit) || 0) + +a.qty); }); m.forEach((v, u) => rows.push([`Total ${u}`, Math.round(v).toLocaleString()])); }
+    if (k === "locations") { const m = new Map(); p.locations.forEach(l => { const t = p.location_types.find(x => x.id === l.type); const n = t ? t.name : l.type; m.set(n, (m.get(n) || 0) + 1); }); m.forEach((v, n) => rows.push([n, String(v)])); }
+    if (k === "bands") for (const b of p.bands || []) { if (b.kind !== "quantities") continue; const r = rowsOf(b.data), head = r[0] && isNaN(+r[0][0]) ? r[0] : null;
+      const body = head ? r.slice(1) : r, n = Math.max(0, ...body.map(x => x.length)) - 2;
+      for (let i = 0; i < n; i++) { const tot = body.reduce((s2, x) => s2 + (+String(x[i + 2] || "").replace(/,/g, "") || 0), 0); if (tot) rows.push([`Total ${head ? head[i + 2] : "qty " + (i + 1)}`, Math.round(tot).toLocaleString()]); } }
+  }
+  return rows;
+}
+function summaryBlock(p, b, x, y, w, hh) {
+  const rows = summaryRows(p, b.metrics || SUMMARY_DEFAULT), fs = (b.font_size || 9) * PT, title = (b.title || "Summary").toUpperCase();
+  let o = `<text x="${x + PAD}" y="${y + PAD + fs * 1.1}" font-size="${fs * 1.1}" font-weight="700" letter-spacing=".15" fill="#18262B">${esc(title)}</text>`;
+  let ty = y + PAD + fs * 1.1 + fs * 0.8;
+  o += `<line x1="${x + PAD}" x2="${x + w - PAD}" y1="${ty - fs * 0.4}" y2="${ty - fs * 0.4}" stroke="#18262B" stroke-width=".2"/>`;
+  for (const [k, v] of rows) { ty += fs * LINE; if (ty > y + hh - PAD) break;
+    o += `<text x="${x + PAD}" y="${ty}" font-size="${fs}" fill="#5D6B70">${esc(k)}</text><text x="${x + w - PAD}" y="${ty}" font-size="${fs}" font-weight="600" text-anchor="end" fill="#18262B">${esc(v)}</text>`; }
+  return o;
+}
+function calendarBlock(p, b, x, y, w, hh) {
+  const from = (b.from || p.time.start || "").slice(0, 7) || new Date().toISOString().slice(0, 7), n = b.months || 12;
+  const [fy, fm] = from.split("-").map(Number), wd = p.time.work_days_per_week || 7, ws = p.time.week_start ?? 1;
+  const off = d => { const k = new Date(d).getUTCDay(); return (wd <= 5.5 && (k === 0 || k === 6)) || (wd < 7 && wd > 5.5 && k === 0); };
+  const sd = (p.time_markers || []).filter(m => m.kind === "shutdown" && m.finish && m.ch0_m == null).map(m => [tms(m.start), tms(m.finish)]);
+  const cols = Math.max(1, Math.round(Math.sqrt(n * (w / hh) * 0.9))), rows = Math.ceil(n / cols), cw = (w - 2) / cols, ch = (hh - 2) / rows;
+  const cell = Math.min(cw / 7.6, ch / 8.4), fs = cell * 0.55;
+  let o = "";
+  for (let i = 0; i < n; i++) {
+    const mx = x + 1 + (i % cols) * cw + (cw - cell * 7) / 2, my = y + 1 + Math.floor(i / cols) * ch + cell * 0.2, m0 = Date.UTC(fy, fm - 1 + i, 1), dt = new Date(m0);
+    o += `<text x="${mx + cell * 3.5}" y="${my + cell * 0.8}" font-size="${fs * 1.15}" font-weight="700" text-anchor="middle" fill="#18262B">${MON[dt.getUTCMonth()]} ${dt.getUTCFullYear()}</text>`;
+    const lead = (dt.getUTCDay() - ws + 7) % 7, days = new Date(Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth() + 1, 0)).getUTCDate();
+    for (let d = 0; d < days; d++) {
+      const k = lead + d, cx = mx + (k % 7) * cell, cy = my + cell * 1.2 + Math.floor(k / 7) * cell, t = m0 + d * DAY;
+      const stood = sd.some(([a, c]) => t >= a && t < c), fill = stood ? "#E06666" : off(t) ? "#F4CCCC" : "#FFFFFF";
+      o += `<rect x="${cx}" y="${cy}" width="${cell * 0.94}" height="${cell * 0.94}" fill="${fill}" stroke="#C9D2D2" stroke-width=".1"/><text x="${cx + cell * 0.47}" y="${cy + cell * 0.66}" font-size="${fs * 0.85}" text-anchor="middle" fill="#18262B">${d + 1}</text>`;
+    }
+  }
+  return o;
 }

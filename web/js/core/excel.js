@@ -70,7 +70,7 @@ export async function importWorkbook(buf, discipline = "rail") {
   for (const { sh, hr, cells, title } of registers) {
     const c = { id: colOf(cells, "id"), name: colOf(cells, "activity", "name", "description"), leg: colOf(cells, "leg", "direction"), start: colOf(cells, "start"),
       finish: colOf(cells, "finish"), ch0: colOf(cells, "ch from", "chainage from", "start chainage", "from ch"), ch1: colOf(cells, "ch to", "chainage to", "end chainage", "to ch"),
-      qty: colOf(cells, "qty", "quantity"), stand: colOf(cells, "stand-down", "standdown"), basis: colOf(cells, "source", "basis") };
+      qty: colOf(cells, "qty", "quantity"), stand: colOf(cells, "stand-down", "standdown"), basis: colOf(cells, "source", "basis"), pred: colOf(cells, "predecessor", "pred") };
     const nm = title.replace(/^activity register\s*[—–-]\s*/i, "").trim();
     const ds = { id: newId("ds_"), name: nm === nm.toUpperCase() ? nm.toLowerCase().replace(/(^|[\s:(])\S/g, s => s.toUpperCase()) : nm, source: `excel:${sh.name}`, notes: [] };
     const key = sh.name.toLowerCase().replace("activity register", "").replace(/^[\s-]+|[\s-]+$/g, "");
@@ -81,7 +81,7 @@ export async function importWorkbook(buf, discipline = "rail") {
       const s = c.start ? sh.date(r, c.start) : null, f = c.finish ? sh.date(r, c.finish) : null;
       if (!g("id") || s == null || f == null || g("ch0") == null || g("ch1") == null) continue;
       raw.push({ ds: ds.id, id: String(g("id")), name: String(g("name") || g("id")), leg: String(g("leg") || ""), start: s, finish: f, ch0: +g("ch0"), ch1: +g("ch1"),
-        qty: g("qty"), stand: g("stand"), basis: g("basis") });
+        qty: g("qty"), stand: g("stand"), basis: g("basis"), pred: g("pred") });
     }
   }
   const big = Math.max(...raw.map(x => Math.max(Math.abs(x.ch0), Math.abs(x.ch1))));
@@ -105,6 +105,9 @@ export async function importWorkbook(buf, discipline = "rail") {
     if (bandLeg(x.leg) && Math.abs(x.ch1 - x.ch0) * k > 1) continue; // interface / stand-down rows become time markers
     const a = makeActivity(x.ds, x.id, x.name, fmtT(x.start), fmtT(x.finish + DAY), x.ch0 * k, x.ch1 * k, x.style,
       { notes: [x.leg, x.qty, x.basis].filter(v => v && String(v) !== "—").join(" · ") });
+    // predecessors: "A100, A110SS+2, A120FF" (Activity ID, optional type and lag in days)
+    if (x.pred) a.links = String(x.pred).split(/[,;\n]+/).map(s => s.trim().match(/^(.+?)(FS|SS|FF|SF)?([+-]\d+(?:\.\d+)?)?d?$/i)).filter(Boolean)
+      .map(m => ({ code: m[1].trim(), type: (m[2] || "FS").toUpperCase(), lag_days: m[3] ? +m[3] : 0 }));
     const days = (x.finish - x.start) / DAY + 1, len = Math.abs(x.ch1 - x.ch0) * k;
     if (len > 1) { a.qty = Math.round(len * 10) / 10; a.qty_unit = "m"; a.rate = Math.round((len / days) * 10) / 10; a.rate_unit = "m/day"; }
     if (x.stand) a.notes = (a.notes ? a.notes + " · " : "") + `stand-downs ${x.stand}`;

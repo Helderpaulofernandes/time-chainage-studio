@@ -163,6 +163,7 @@ const XF = {
   CALENDAR: "clndr_id default_flag clndr_name proj_id base_clndr_id last_chng_date clndr_type day_hr_cnt week_hr_cnt month_hr_cnt year_hr_cnt rsrc_private clndr_data",
   SCHEDOPTIONS: "schedoptions_id proj_id sched_outer_depend_type sched_open_critical_flag sched_lag_early_start_flag sched_retained_logic sched_setplantoforecast sched_float_type sched_calendar_on_relationship_lag sched_use_expect_end_flag sched_progress_override level_float_thrs_cnt level_outer_assign_flag level_outer_assign_priority level_over_alloc_pct level_within_float_flag level_keep_sched_date_flag level_all_rsrc_flag sched_use_project_end_date_for_float enable_multiple_longest_path_calc limit_multiple_longest_path_calc max_multiple_longest_path use_total_float_multiple_longest_paths key_activity_for_multiple_longest_paths LevelPriorityList",
   PROJWBS: "wbs_id proj_id obs_id seq_num est_wt proj_node_flag sum_data_flag status_code wbs_short_name wbs_name phase_id parent_wbs_id ev_user_pct ev_etc_user_value orig_cost indep_remain_total_cost ann_dscnt_rate_pct dscnt_period_type indep_remain_work_qty anticip_start_date anticip_end_date ev_compute_type ev_etc_compute_type guid tmpl_guid plan_open_state",
+  TASKPRED: "task_pred_id task_id pred_task_id proj_id pred_proj_id pred_type lag_hr_cnt float_path aref arls comments",
   TASK: "task_id proj_id wbs_id clndr_id phys_complete_pct rev_fdbk_flag est_wt lock_plan_flag auto_compute_act_flag complete_pct_type task_type duration_type status_code task_code task_name rsrc_id total_float_hr_cnt free_float_hr_cnt remain_drtn_hr_cnt act_work_qty remain_work_qty target_work_qty target_drtn_hr_cnt target_equip_qty act_equip_qty remain_equip_qty cstr_date act_start_date act_end_date late_start_date late_end_date expect_end_date early_start_date early_end_date restart_date reend_date target_start_date target_end_date rem_late_start_date rem_late_end_date cstr_type priority_type suspend_date resume_date float_path float_path_order guid tmpl_guid cstr_date2 cstr_type2 driving_path_flag act_this_per_work_qty act_this_per_equip_qty external_early_start_date external_late_end_date cbs_id pre_pess_start_date pre_pess_finish_date post_pess_start_date post_pess_finish_date create_date update_date create_user update_user location_id control_updates_flag crt_path_num",
   UDFVALUE: "udf_type_id fk_id proj_id udf_date udf_number udf_text udf_code_id",
 };
@@ -217,10 +218,10 @@ export function write(p, datasetId) {
     }
     return parent;
   };
-  const styles = Object.fromEntries(p.styles.map(s => [s.code, s])), tasks = [], udf = [];
+  const styles = Object.fromEntries(p.styles.map(s => [s.code, s])), tasks = [], udf = [], tidOf = new Map();
   const xd = ms => fmtT(ms).replace("T", " ");
   acts.slice().sort((a, b) => a.start.localeCompare(b.start) || a.code.localeCompare(b.code)).forEach((a, n) => {
-    const tid = String(500001 + n), st = parseT(a.start);
+    const tid = String(500001 + n), st = parseT(a.start); tidOf.set(a.code, tid);
     const mile = (styles[a.style] || {}).kind === "milestone" || ["TT_Mile", "TT_FinMile"].includes((a.p6 || {}).task_type);
     const fi = mile ? st : parseT(a.finish), hrs = Math.round((fi - st) / 36e5 * 100) / 100, s = xd(st), f = xd(fi);
     tasks.push({ task_id: tid, proj_id: PID, wbs_id: wbsFor(a.wbs || a.style), clndr_id: CAL, phys_complete_pct: 0, rev_fdbk_flag: "N", est_wt: 1, lock_plan_flag: "N",
@@ -233,7 +234,11 @@ export function write(p, datasetId) {
     udf.push({ udf_type_id: "9101", fk_id: tid, proj_id: PID, udf_number: (a.ch0_m / scale).toFixed(2) }, { udf_type_id: "9102", fk_id: tid, proj_id: PID, udf_number: (a.ch1_m / scale).toFixed(2) },
       { udf_type_id: "9103", fk_id: tid, proj_id: PID, udf_text: a.style });
   });
-  table("PROJWBS", wbs); table("TASK", tasks); table("UDFVALUE", udf);
+  // logic links between the exported activities (relationships only; P6 does the scheduling)
+  const preds = [];
+  for (const a of acts) for (const l of a.links || []) { const t = tidOf.get(a.code), pr = tidOf.get(l.code); if (!t || !pr) continue;
+    preds.push({ task_pred_id: String(700001 + preds.length), task_id: t, pred_task_id: pr, proj_id: PID, pred_proj_id: PID, pred_type: "PR_" + (["FS", "SS", "FF", "SF"].includes(l.type) ? l.type : "FS"), lag_hr_cnt: Math.round((l.lag_days || 0) * 8 * 100) / 100 }); }
+  table("PROJWBS", wbs); table("TASK", tasks); if (preds.length) table("TASKPRED", preds); table("UDFVALUE", udf);
   out.push("%E");
   return encode1252(out.join("\r\n") + "\r\n");
 }

@@ -45,8 +45,15 @@ function stationText(c, m) {
   const r = rest.toFixed(dec), [ip, fp] = r.split(".");
   return (neg ? "-" : "") + sta + "+" + ip.padStart(base === 100 ? 2 : 3, "0") + (fp ? "." + fp : "");
 }
+// Chainage equations: where the kilometrage jumps (a realignment), the chainage shown from there on restarts at a new value.
+// Positions stay a running distance in metres; only the text changes.
+export function shownM(p, m) {
+  const eq = p.chainage.equations; if (!eq || !eq.length) return m;
+  let best = null; for (const e of eq) if (m >= e.at_m - 1e-6 && (!best || e.at_m > best.at_m)) best = e;
+  return best ? best.value_m + (m - best.at_m) : m;
+}
 export function chFmt(p, m, withPrefix = false) {
-  const c = p.chainage;
+  const c = p.chainage; m = shownM(p, m);
   const v = isStation(c) ? stationText(c, m) : (m / unitFactor(c.unit)).toFixed(c.decimals ?? (c.unit === "km" ? 3 : c.unit === "mi" ? 2 : 0));
   return (withPrefix && c.prefix ? c.prefix + " " : "") + v;
 }
@@ -71,6 +78,7 @@ export function chToM(p, v) {
 // Value for an input box: a station string on station projects, otherwise a plain number in the project unit
 export function mToCh(p, m) { if (m == null) return ""; return isStation(p.chainage) ? stationText(p.chainage, m) : +(m / unitFactor(p.chainage.unit)).toFixed(6); }
 export const chIsStation = p => isStation(p.chainage);
+export const chName = p => (isStation(p.chainage) ? "station" : `chainage (${p.chainage.unit})`);
 
 export const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 export const $ = (s, r = document) => r.querySelector(s);

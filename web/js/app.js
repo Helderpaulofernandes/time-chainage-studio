@@ -7,6 +7,8 @@ import { DAY, tms, tstr, dstr, niceDate, niceFinish, chFmt, chToM, mToCh, chLabe
 const chAttrs = (p, extra = {}) => (chIsStation(p) ? { type: "text", inputmode: "decimal", placeholder: p.chainage.unit === "ft" ? "12+34.56" : "12+345", ...extra } : { type: "number", step: "any", ...extra });
 const chName = p => (chIsStation(p) ? "station" : `chainage (${p.chainage.unit})`);
 import * as D from "./dialogs.js";
+import * as PN from "./panels.js";
+import { newProject } from "./core/model.js";
 import { defaultBrand, projectCopy } from "./brand.js";
 import { pageView, printPage, exportPng, renderPage } from "./page.js";
 
@@ -52,7 +54,7 @@ function redo() { if (!app.redoS.length) return; app.undoS.push(JSON.stringify(a
 function validSel() { if (app.sel && !findSel()) app.sel = null; }
 function findSel() {
   const s = app.sel, p = app.p; if (!s || !p) return null;
-  const list = { act: p.activities, loc: p.locations, mk: p.time_markers, style: p.styles, ds: p.datasets }[s.kind] || [];
+  const list = { act: p.activities, loc: p.locations, mk: p.time_markers, style: p.styles, ds: p.datasets, note: p.notes || [], haul: p.hauls || [] }[s.kind] || [];
   return list.find(x => (s.kind === "style" ? x.code : x.id) === s.id) || null;
 }
 let tt; function toast(msg) { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(tt); tt = setTimeout(() => (t.hidden = true), 3200); }
@@ -61,7 +63,7 @@ let tt; function toast(msg) { const t = $("#toast"); t.textContent = msg; t.hidd
 const MENU = {
   File: [["New project…", "Ctrl+N", () => D.projectSetup(app, "new")], ["New from example…", "", () => D.examples(app)], ["Open project…", "Ctrl+O", () => D.openProject(app)],
     ["Open project file from my PC…", "", () => openFromPc()], ["Save to a file on my PC…", "", () => need() && linkFile()], ["Reload from file", "", () => need() && reloadFile()], ["Download a copy (.json)", "", () => need() && exportFile("json")], "-", ["Duplicate project", "", () => need() && api.duplicate(app.p.id).then(p => { app.open(p); toast("Copy opened"); })], "-",
-    ["Import Excel workbook…", "", () => D.importExcel(app)], ["Import from P6 (XER) with mapping…", "", () => D.p6Dialog(app, "import")], ["Import TurboChart (.tchart)…", "", () => D.importTchart(app)], ["Open project file (.json)…", "", () => D.importJson(app)], "-",
+    ["Import Excel workbook…", "", () => D.importExcel(app)], ["Import from P6 (XER) with mapping…", "", () => D.p6Dialog(app, "import")], ["Import TurboChart (.tchart)…", "", () => D.importTchart(app)], ["Import Microsoft Project (XML)…", "", () => importMsp()], ["Open project file (.json)…", "", () => D.importJson(app)], "-",
     ["Export P6 XER (main data set)", "", () => need() && exportFile("xer", app.p.view.main_dataset)], ["Export TurboChart (.tchart)", "", () => need() && exportFile("tchart")], 
     ["Export chart as SVG", "", () => need() && exportChartSvg()], ["Export playback video…", "", () => need() && openVideo()], "-",
     ["Page layout…", "Ctrl+L", () => need() && setView("page")], ["Print…", "Ctrl+P", () => need() && printPage(app.p)], ["Export page as PNG", "", () => need() && exportPng(app.p)]],
@@ -71,14 +73,22 @@ const MENU = {
     ["Zoom chainage in", "Ctrl+Shift+wheel", () => zoomX(1.5)], ["Zoom chainage out", "", () => zoomX(1 / 1.5)], ["Fit chainage", "", () => { app.xZoom = 1; render(); }], "-",
     ["Labels", "", () => toggle("show_labels"), () => app.p?.view.show_labels !== false], ["Footprints", "", () => toggle("show_footprints"), () => app.p?.view.show_footprints !== false],
     ["Logic links (from P6)", "", () => { app.p.view.show_links = !app.p.view.show_links; app.changed(); }, () => !!app.p?.view.show_links],
+    ["Crew steps", "", () => { app.p.view.show_crews = !app.p.view.show_crews; app.changed(); }, () => !!app.p?.view.show_crews],
     ["Time markers", "", () => toggle("show_time_markers"), () => app.p?.view.show_time_markers !== false], ["Location grid", "", () => toggle("show_location_grid"), () => app.p?.view.show_location_grid !== false]],
-  Insert: [["Activity", "", () => need() && insertAct()], ["Location marker", "", () => need() && insertLoc()], ["Time marker", "", () => need() && insertMk()], ["Section…", "", () => need() && D.projectSetup(app, "edit")], ["Activity style", "", () => need() && insertStyle()], ["Header image…", "", () => need() && D.headerImage(app)]],
+  Insert: [["Activity", "", () => need() && insertAct()], ["Location marker", "", () => need() && insertLoc()], ["Time marker", "", () => need() && insertMk()], ["Text note", "", () => need() && insertNote()], ["Haul arrow", "", () => need() && insertHaul()], ["Section…", "", () => need() && D.projectSetup(app, "edit")], ["Activity style", "", () => need() && insertStyle()], ["Header image…", "", () => need() && D.headerImage(app)]],
   Data: [["Import from P6 (XER) with mapping…", "", () => D.p6Dialog(app, "import")], ["Sync from P6 (XER)…", "", () => need() && D.p6Dialog(app, "sync")], "-",
+    ["Import Microsoft Project (XML)…", "", () => importMsp()], ["Rate sheet to a sketch data set…", "", () => need() && PN.rateSheetDialog(app)], "-",
+    ["Resource histogram…", "", () => need() && PN.resourcesDialog(app)], ["Progress lines (as built)…", "", () => need() && PN.progressDialog(app)], "-",
     ["Data sets (options)", "", () => need() && tab("ds")], ["Productivity library", "", () => need() && D.productivities(app)]],
-  Project: [["Project setup…", "", () => need() && D.projectSetup(app, "edit")], ["Header image…", "", () => need() && D.headerImage(app)], ["Branding…", "", () => need() && D.brandDialog(app)], ["Activity styles", "", () => need() && tab("styles")], ["Locations and types", "", () => need() && tab("locs")]],
+  Project: [["Project setup…", "", () => need() && D.projectSetup(app, "edit")], ["Chart layout and axes…", "", () => need() && PN.chartLayout(app)], ["Bands above and below the chart…", "", () => need() && PN.bandsDialog(app)], ["Header image…", "", () => need() && D.headerImage(app)], ["Branding…", "", () => need() && D.brandDialog(app)], ["Activity styles", "", () => need() && tab("styles")], ["Locations and types", "", () => need() && tab("locs")]],
   Help: [["Keyboard shortcuts", "", () => shortcuts()], ["Source code on GitHub", "", () => window.open("https://github.com/Helderpaulofernandes/time-chainage-studio", "_blank")]],
 };
 function need() { if (!app.p) { toast("Open or create a project first."); return false; } return true; }
+// MS Project import goes into the open project, or into a new one when none is open
+async function importMsp() {
+  if (!app.p) { const np = await api.put(newProject("MS Project import", "rail")); app.open(np, true); }
+  PN.msProjectDialog(app);
+}
 async function exportFile(kind, datasetId) { const f = await api.exportFile(app.p, kind, datasetId); download(f.name, f.blob); }
 
 // ---- linked file on the user's PC (Chrome / Edge): every save is written to it
@@ -239,6 +249,9 @@ svgEl.addEventListener("pointerdown", e => {
   const q = pt(e);
   if (app.mode === "draw") { if (!inGrid(q)) return; drag = { type: "draw", q0: q, q1: q }; svgEl.setPointerCapture(e.pointerId); return; }
   const hd = e.target.closest("[data-h]"), ac = e.target.closest("[data-act]"), mk = e.target.closest("[data-mk]"), lc = e.target.closest("[data-loc]");
+  const nt = e.target.closest("[data-note]"), hl = e.target.closest("[data-haul]");
+  if (nt) { const n = (app.p.notes || []).find(x => x.id === nt.dataset.note); select("note", n.id); drag = { type: "note", n, q0: q, orig: { ...n }, snap: JSON.stringify(app.p), moved: false }; svgEl.setPointerCapture(e.pointerId); return; }
+  if (hl) return select("haul", hl.dataset.haul);
   if (hd && app.sel?.kind === "act") return startDrag(e, "end", app.sel.id, q, +hd.dataset.h);
   if (ac) { select("act", ac.dataset.act); return startDrag(e, "move", ac.dataset.act, q); }
   if (mk) return select("mk", mk.dataset.mk);
@@ -256,6 +269,10 @@ svgEl.addEventListener("pointermove", e => {
   const q = pt(e); readout(q);
   if (!drag) return;
   if (drag.type === "draw") { drag.q1 = q; const rb = $("#rb"); Object.entries({ x1: drag.q0.x, y1: drag.q0.y, x2: q.x, y2: q.y }).forEach(([k, v]) => rb.setAttribute(k, v)); rb.removeAttribute("display"); return; }
+  if (drag.type === "note") {
+    if (Math.abs(q.x - drag.q0.x) + Math.abs(q.y - drag.q0.y) > 3) drag.moved = true; if (!drag.moved) return;
+    const n = drag.n, o = drag.orig; n.ch_m = o.ch_m + snapM(G.Xi(q.x) - G.Xi(drag.q0.x)); n.at = tstr(tms(o.at) + snapT(G.Yi(q.y) - G.Yi(drag.q0.y))); drawChart(); return;
+  }
   const a = app.p.activities.find(x => x.id === drag.id), o = drag.orig; if (!a) return;
   if (Math.abs(q.x - drag.q0.x) + Math.abs(q.y - drag.q0.y) > 3) drag.moved = true;
   if (!drag.moved) return;
@@ -344,6 +361,12 @@ function insertLoc() { const p = app.p; app.commit(); const l = { id: uid("l_"),
   p.locations.push(l); select("loc", l.id); app.changed(); }
 function insertMk() { const p = app.p; app.commit(); const m = { id: uid("t_"), label: "Milestone", kind: "milestone", start: p.time.start + "T00:00", finish: null, ch0_m: null, ch1_m: null, colour: "#C00000" };
   p.time_markers.push(m); select("mk", m.id); app.changed(); }
+function insertNote() { const p = app.p; app.commit(); p.notes ||= [];
+  const n = { id: uid("n_"), text: "Note", ch_m: (p.chainage.start_m + p.chainage.end_m) / 2, at: tstr(tms(p.time.start) + 30 * DAY), angle: 0, size: null, colour: "#18262B", box: false, bold: false };
+  p.notes.push(n); select("note", n.id); app.changed(); setTimeout(() => { const f = $("#pp-note"); f?.focus(); f?.select(); }, 30); }
+function insertHaul() { const p = app.p, c = p.chainage, L = c.end_m - c.start_m; app.commit(); p.hauls ||= [];
+  const hl = { id: uid("h_"), from0_m: c.start_m + L * 0.2, from1_m: c.start_m + L * 0.3, to0_m: c.start_m + L * 0.6, to1_m: c.start_m + L * 0.7, at: tstr(tms(p.time.start) + 60 * DAY), label: "Haul", colour: "#7F6000" };
+  p.hauls.push(hl); select("haul", hl.id); app.changed(); }
 function insertStyle() { const p = app.p; app.commit(); let code = "STYLE" + (p.styles.length + 1); while (p.styles.some(s => s.code === code)) code += "_";
   p.styles.push({ code, name: "New style", kind: "line", colour: "#1F6E8C", width: 3, dash: "solid", fill_opacity: 0.3, legend: true,
     label: { show: true, text: "{name}", follow_slope: true, position: "mid", side: "above", size: 11 }, footprint: { enabled: false, length_m: 0, lag_days: 0, opacity: 0.18 } });
@@ -353,15 +376,17 @@ function delSel() {
   if (s.kind === "style" && app.p.activities.some(a => a.style === s.id)) return toast("That style is still used by activities. Move them to another style first.");
   if (s.kind === "ds") return toast("Delete data sets from the Data sets tab.");
   app.commit();
-  const key = { act: "activities", loc: "locations", mk: "time_markers", style: "styles" }[s.kind];
+  const key = { act: "activities", loc: "locations", mk: "time_markers", style: "styles", note: "notes", haul: "hauls" }[s.kind];
   app.p[key] = app.p[key].filter(x => x !== it); app.sel = null; app.changed(); toast("Deleted");
 }
 function dupSel() {
-  const s = app.sel, it = findSel(); if (!s || !it || !["act", "loc", "mk"].includes(s.kind)) return;
+  const s = app.sel, it = findSel(); if (!s || !it || !["act", "loc", "mk", "note", "haul"].includes(s.kind)) return;
   app.commit(); const c = JSON.parse(JSON.stringify(it)); c.id = uid(s.kind[0] + "_");
   if (s.kind === "act") { c.code = nextCode(); c.locked = false; c.p6 = null; c.start = tstr(tms(c.start) + 7 * DAY); c.finish = tstr(tms(c.finish) + 7 * DAY); app.p.activities.push(c); }
   if (s.kind === "loc") { c.name += " (copy)"; app.p.locations.push(c); }
   if (s.kind === "mk") { c.label += " (copy)"; app.p.time_markers.push(c); }
+  if (s.kind === "note") { c.at = tstr(tms(c.at) + 14 * DAY); app.p.notes.push(c); }
+  if (s.kind === "haul") { c.at = tstr(tms(c.at) + 14 * DAY); app.p.hauls.push(c); }
   app.sel = { kind: s.kind, id: c.id }; app.changed();
 }
 
@@ -390,6 +415,29 @@ function propsPanel(box) {
   if (k === "loc") return locProps(box, it);
   if (k === "mk") return mkProps(box, it);
   if (k === "style") return styleProps(box, it);
+  if (k === "note") return noteProps(box, it);
+  if (k === "haul") return haulProps(box, it);
+}
+function noteProps(box, n) {
+  const p = app.p;
+  box.append(h("h3", {}, "Text note"), h("p", { class: "hint" }, "Drag the note on the chart to move it."), h("div", { class: "fgrid" },
+    h("div", { class: "full" }, F("Text", I(n.text, edit(n, "text"), { id: "pp-note" }))),
+    F(chName(p)[0].toUpperCase() + chName(p).slice(1), I(mToCh(p, n.ch_m), v => { const m = chToM(p, v); if (m != null) edit(n, "ch_m")(m); }, chAttrs(p))),
+    F("Date", I((n.at || "").slice(0, 16), edit(n, "at"), { type: "datetime-local" })),
+    F("Angle (degrees)", I(n.angle || 0, edit(n, "angle", v => +v || 0), { type: "number", step: "1" })), F("Size", I(n.size || "", edit(n, "size", num), { type: "number", min: 6, placeholder: "auto" })),
+    F("Colour", I(n.colour || "#18262B", edit(n, "colour"), { type: "color" })), h("span"),
+    C(n.box, edit(n, "box"), "White box behind"), C(n.bold, edit(n, "bold"), "Bold"),
+    F(`Leader to ${chName(p)}`, I(mToCh(p, n.leader_ch_m), v => edit(n, "leader_ch_m")(v === "" ? null : chToM(p, v)), chAttrs(p, { placeholder: "none" }))),
+    F("Leader to date", I((n.leader_at || "").slice(0, 16), v => edit(n, "leader_at")(v || null), { type: "datetime-local" }))),
+    h("div", { class: "btns" }, h("button", { type: "button", onclick: dupSel }, "Duplicate"), h("button", { type: "button", class: "danger", onclick: delSel }, "Delete")));
+}
+function haulProps(box, hl) {
+  const p = app.p, chI = k => I(mToCh(p, hl[k]), v => { const m = chToM(p, v); if (m != null) edit(hl, k)(m); }, chAttrs(p));
+  box.append(h("h3", {}, "Haul arrow"), h("p", { class: "hint" }, "A curved arrow from where material is dug (cut) to where it is placed (fill), labelled with the volume."), h("div", { class: "fgrid" },
+    h("div", { class: "full" }, F("Label", I(hl.label, edit(hl, "label")))),
+    F("From (start)", chI("from0_m")), F("From (end)", chI("from1_m")), F("To (start)", chI("to0_m")), F("To (end)", chI("to1_m")),
+    F("Date", I((hl.at || "").slice(0, 16), edit(hl, "at"), { type: "datetime-local" })), F("Colour", I(hl.colour || "#7F6000", edit(hl, "colour"), { type: "color" }))),
+    h("div", { class: "btns" }, h("button", { type: "button", onclick: dupSel }, "Duplicate"), h("button", { type: "button", class: "danger", onclick: delSel }, "Delete")));
 }
 function summary(box) {
   const p = app.p, lg = renderLegend(p, { size: 11, title: "Legend" });
@@ -401,7 +449,8 @@ function actProps(box, a) {
   const p = app.p, sm = styleMap(p), st = sm[a.style] || {};
   const s = tms(a.start), f = tms(a.finish), dur = (f - s) / DAY;
   box.append(h("div", { class: "edithead" }, h("h3", {}, a.code + " · " + a.name), a.locked ? h("span", { class: "tag p6" }, "from P6") : h("span", { class: "tag" }, "manual")));
-  if (a.locked) box.append(h("p", { class: "hint" }, `Dates come from P6${a.p6?.task_code ? " (" + a.p6.task_code + ")" : ""}. Change them in P6 and use Data → Sync. Chainage, style, label and footprint can be changed here and exported back to P6 as user-defined fields.`));
+  if (a.locked && a.ms) box.append(h("p", { class: "hint" }, "Dates come from Microsoft Project. Change them there and import again."));
+  else if (a.locked) box.append(h("p", { class: "hint" }, `Dates come from P6${a.p6?.task_code ? " (" + a.p6.task_code + ")" : ""}. Change them in P6 and use Data → Sync. Chainage, style, label and footprint can be changed here and exported back to P6 as user-defined fields.`));
   const dt = v => (v || "").slice(0, 16);
   box.append(h("div", { class: "fgrid" },
     F("Activity ID", I(a.code, edit(a, "code"), { disabled: a.locked })), F("Data set", S(p.datasets.map(d => [d.id, d.name]), a.dataset, edit(a, "dataset"))),
@@ -411,7 +460,11 @@ function actProps(box, a) {
     F("Duration (days)", I(+dur.toFixed(2), v => { const n = num(v); if (n == null || n < 0) return; edit(a, "finish")(tstr(s + n * DAY)); }, { type: "number", step: "0.5", min: 0, disabled: a.locked })),
     h("span"),
     F(`From ${chName(p)}`, I(mToCh(p, a.ch0_m), v => { const m = chToM(p, v); if (m != null) edit(a, "ch0_m")(m); }, chAttrs(p))),
-    F(`To ${chName(p)}`, I(mToCh(p, a.ch1_m), v => { const m = chToM(p, v); if (m != null) edit(a, "ch1_m")(m); }, chAttrs(p)))));
+    F(`To ${chName(p)}`, I(mToCh(p, a.ch1_m), v => { const m = chToM(p, v); if (m != null) edit(a, "ch1_m")(m); }, chAttrs(p))),
+    ...(st.kind === "taper" ? [F(`At the finish: from`, I(mToCh(p, a.fin_ch0_m ?? a.ch0_m), v => { const m = chToM(p, v); if (m != null) edit(a, "fin_ch0_m")(m); }, chAttrs(p))),
+      F(`At the finish: to`, I(mToCh(p, a.fin_ch1_m ?? a.ch1_m), v => { const m = chToM(p, v); if (m != null) edit(a, "fin_ch1_m")(m); }, chAttrs(p)))] : []),
+    F("Crew", I(a.crew || "", edit(a, "crew"), { placeholder: "for crew steps" })), F("Line / track", I(a.track || "", edit(a, "track"), { placeholder: "Up, Down, Main…" })),
+    (p.side_cols || []).length ? F("Side column", S([["", "On the chart"], ...p.side_cols.map(s => [s.id, s.name])], a.col || "", v => edit(a, "col")(v || null))) : h("span")));
   // productivity
   const len = Math.abs(a.ch1_m - a.ch0_m), lu = lenUnit(p), L = lenFromM(p, len);
   box.append(h("h3", {}, "Productivity"), h("div", { class: "fgrid" },
@@ -453,6 +506,7 @@ function locProps(box, l) {
     F("Type", S(p.location_types.map(t => [t.id, t.name]), l.type, edit(l, "type"))),
     F("Row", S([["", "Type default"], ...Array.from({ length: p.location_rows }, (_, i) => [String(i + 1), `Row ${i + 1}`])], l.row ? String(l.row) : "", v => edit(l, "row")(v ? +v : null))),
     C(l.label, edit(l, "label"), "Show label"), C(l.grid ?? (p.location_types.find(t => t.id === l.type) || {}).grid, edit(l, "grid"), "Line down the grid"),
+    C(l.pin, edit(l, "pin"), "Pin on the header image"), F("Pin height (% down the image)", I(Math.round((l.pin_y ?? 0.6) * 100), v => edit(l, "pin_y")(clamp((+v || 60) / 100, 0.05, 1)), { type: "number", min: 5, max: 100 })),
     h("div", { class: "full" }, F("Notes", I(l.notes, edit(l, "notes"))))),
     h("div", { class: "btns" }, h("button", { type: "button", onclick: dupSel }, "Duplicate"), h("button", { type: "button", class: "danger", onclick: delSel }, "Delete")));
 }
@@ -463,6 +517,7 @@ function mkProps(box, m) {
     h("div", { class: "full" }, F("Label", I(m.label, edit(m, "label")))),
     F("Kind", S([["milestone", "Milestone"], ["band", "Band (access, interface)"], ["shutdown", "Stand-down / shutdown"], ["possession", "Possession"], ["restriction", "Restriction"]], m.kind, edit(m, "kind"))),
     F("Colour", I(m.colour || "#808080", edit(m, "colour"), { type: "color" })),
+    F("Milestone label", S([["", "Beside the diamond, dashed line"], ["boxed", "In a box in the middle, solid line"]], m.label_style || "", edit(m, "label_style"))), h("span"),
     F("Start", I((m.start || "").slice(0, 16), edit(m, "start"), { type: "datetime-local" })), F("Finish", I((m.finish || "").slice(0, 16), v => edit(m, "finish")(v || null), { type: "datetime-local" })),
     F(`From ${chName(p)}`, I(mToCh(p, m.ch0_m), v => edit(m, "ch0_m")(v === "" ? null : chToM(p, v)), chAttrs(p, { placeholder: "whole line" }))),
     F(`To ${chName(p)}`, I(mToCh(p, m.ch1_m), v => edit(m, "ch1_m")(v === "" ? null : chToM(p, v)), chAttrs(p, { placeholder: "whole line" })))),
@@ -476,7 +531,7 @@ function styleProps(box, s) {
   const setF = (k2, v) => { app.commit(); s.footprint[k2] = v; app.changed(); };
   box.append(h("h3", {}, `Style ${s.code}`), h("p", { class: "hint" }, `Used by ${used} activit${used === 1 ? "y" : "ies"}. The code is what P6's "Activity Style" field and TurboChart's shape code hold.`),
     h("div", { class: "fgrid" }, F("Code", I(s.code, rename)), F("Legend name", I(s.name, edit(s, "name"))),
-      F("Drawn as", S([["line", "Line (linear progress)"], ["bar", "Wide bar along the line"], ["block", "Block (area / static)"], ["cut", "Cut (right-angle triangle ◣, falling)"], ["fill", "Fill (right-angle triangle ◢, rising)"], ["milestone", "Milestone"]], s.kind, edit(s, "kind"))),
+      F("Drawn as", S([["line", "Line (linear progress)"], ["bar", "Wide bar along the line"], ["block", "Block (area / static)"], ["cut", "Cut (right-angle triangle ◣, falling)"], ["fill", "Fill (right-angle triangle ◢, rising)"], ["taper", "Tapered area (range changes over time)"], ["milestone", "Milestone"]], s.kind, edit(s, "kind"))),
       F("Colour", I(s.colour, edit(s, "colour"), { type: "color" })), F("Line width", I(s.width, edit(s, "width", num), { type: "number", step: "0.5", min: 0.5 })),
       F("Line type", S([["solid", "Solid"], ["dash", "Dashed"], ["dot", "Dotted"]], s.dash, edit(s, "dash"))), F("Fill opacity", I(s.fill_opacity, edit(s, "fill_opacity", num), { type: "number", step: "0.05", min: 0, max: 1 })),
       F("Marks along the line", S(MARKS, s.marks || "none", edit(s, "marks"))), F("Mark spacing (px)", I(s.mark_spacing || 22, edit(s, "mark_spacing", num), { type: "number", step: "1", min: 6 })),

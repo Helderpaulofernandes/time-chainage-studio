@@ -1,71 +1,73 @@
 # Improvement roadmap
 
-What the app still lacks, compared with time–chainage diagrams prepared for real tenders and projects (rail track renewal, heavy-haul rail, new railway with tunnels, mine-site civil works, and a tunnel track install rate sheet). Each item says what the diagrams do, what we would build, and roughly how big it is.
+What came out of a review of time–chainage diagrams prepared for real tenders and projects (rail track renewal, heavy-haul rail, new railway with tunnels, mine-site civil works, and a tunnel track install rate sheet), and where each feature now lives in the app.
 
-The app stays a **display of the P6 programme**: nothing here adds scheduling logic.
+The app stays a **display of the programme** from P6 or Microsoft Project: nothing here adds scheduling logic.
 
-Size: **S** a day or less · **M** a few days · **L** a week or more.
+## Built
 
-## Done from this review
+### Chart drawing
 
-| Feature | Notes |
-|---|---|
-| Cut and fill styles | Right-angle triangles: cut ◣ (falling left to right), fill ◢ (rising). |
-| Marks along lines | Ticks, arrows (direction of work), V marks, crosses, dots, triangles, at a set spacing. Shown in the legend too. |
-| Area fills | Solid, hatched, cross-hatched, dotted or outline only, for blocks, cut and fill. |
-| Upright labels | A label on a tall, narrow block (a bridge, a culvert) stands upright, inside the block if it fits. |
-| Logic links from P6 | Relationships (FS, SS, FF, SF, with lag) are read from the XER and drawn as thin red arrows. View → Logic links. |
-
-## Next: chart drawing
-
-| # | Feature | What we would build | Size |
-|---|---|---|---|
-| 1 | Axes on any side | Chainage scale at the top, bottom or both; dates on the left, right or both; optionally repeated part-way down a long chart. | M |
-| 2 | Week numbers and project periods | A date column showing week numbers (calendar or project weeks), months since award, or project years (Y1, Y2…), beside or instead of dates. | S |
-| 3 | Broken chainage | Skip empty stretches between work areas, with a break symbol on the axis, so separate sites share one sheet. Also chainage equations (where the kilometrage jumps). | L |
-| 4 | Tapered areas | An area whose chainage range changes over time (a trapezoid): start range at the start date, finish range at the finish date. Covers excavation fronts and bulk earthworks. | M |
-| 5 | Stepped work fronts | Join a crew's activities into one stepped line (work, move, work), as crews do when they hop between sites. Taken from a P6 activity code or the WBS. | M |
-| 6 | Text notes on the chart | Free text placed at a chainage and date, at any angle, with an optional leader line ("Corrections and clean-up", "Haul from Zone 1B"). | S |
-| 7 | Milestone lines with boxed labels | Full-width lines with the label in a box at the centre, as used for Date of award, Site access and Practical completion. | S |
-| 8 | Side columns for work with no chainage | Columns left and right of the chart for design, approvals, procurement and site-wide work, so it sits on the same time scale. | M |
-| 9 | Scale note | "Approx. scale at A3: 10 mm = 200 m" worked out from the page and printed in the title block. | S |
-| 10 | Haul arrows | Curved arrows between a cut and a fill area, labelled with the volume. | M |
-| 11 | Links: elbow routing and filters | Square-cornered link lines, and showing only driving links or links into the visible activities. | S |
-
-## Next: bands above and below the chart
-
-| # | Feature | What we would build | Size |
-|---|---|---|---|
-| 12 | Long section | Ground and design levels along the chainage, with cut and fill shaded, read from a CSV of chainage and levels. | M |
-| 13 | Quantities by section | A bar chart and table of quantities (topsoil, cut to fill, cut to spoil, borrow, capping) for each section, from a CSV or Excel sheet. | M |
-| 14 | Package and contract extents | A strip of dimension arrows showing each package or contract zone, its chainage limits and its length. | S |
-| 15 | Schematic plan | Track and structures drawn along the chainage (bridges, culverts, level crossings, turnouts, the site compound) as symbols with names. This extends location markers. | M |
-| 16 | Terrain or ground-type strip | A coloured strip along the chainage (plain, mountain, cut area, fill area, tunnel). | S |
-| 17 | Summary boxes | Totals (total cut, total fill, number of bridges) worked out from the data and placed on the page layout. | S |
-
-## Next: resources and side panels
-
-| # | Feature | What we would build | Size |
-|---|---|---|---|
-| 18 | Resource histograms on the time axis | Manpower, plant and water use by week, drawn alongside the chart rows and read from P6 resource assignments (TASKRSRC) or a CSV. | L |
-| 19 | Weekly numbers column | A table beside the chart with weekly and cumulative hours, plant counts or cost against each week. | M |
-| 20 | Calendar panel | The project calendar (work days, shutdowns) printed as a small month grid on the page. | S |
-
-## Next: data in and out
-
-| # | Feature | What we would build | Size |
-|---|---|---|---|
-| 21 | Microsoft Project import | Read MS Project XML (File → Save As → XML in MS Project): tasks, dates, WBS, custom fields for chainage and style, and links. Native .mpp files cannot be read in the browser. | M |
-| 22 | Logic links out | Write links back out in XER and TurboChart exports, and read them from TurboChart and Excel. | S |
-| 23 | Line or track attribute | A "line" field per activity (Up, Down, Main, Loop) to filter, colour or offset activities on multi-track jobs. | M |
-| 24 | Rate sheets to activities | Read a rate sheet (section, start date, rate per day, crew) and draw it as a sketch data set for comparison only. It is never written back as programme logic. | M |
-| 25 | Excel import of steps | Read daily cumulative progress (date, chainage) to draw an as-built or forecast front as a stepped line. | M |
-
-## Later
-
-| # | Feature | Size |
+| # | Feature | Where to find it |
 |---|---|---|
-| 26 | Live P6 connection (EPPM web services, Primavera Cloud, P6 Pro database) | L |
-| 27 | Several charts on one sheet (whole scope plus regional sheets from one project) | M |
-| 28 | Fonts for non-Latin scripts in exported PDF, PNG and video (for example Thai titles) | S |
-| 29 | Aerial or map strip with pins placed by chainage, not only a fixed image | M |
+| – | Cut and fill styles: right-angle triangles, cut ◣ (falling left to right), fill ◢ (rising) | Style → Drawn as |
+| – | Marks along lines: ticks, arrows (direction of work), V marks, crosses, dots, triangles | Style → Marks along the line |
+| – | Area fills: solid, hatched, cross-hatched, dotted, outline only | Style → Area fill |
+| – | Upright labels on tall, narrow blocks (bridges, culverts) | Automatic |
+| 1 | Chainage scale at the top, bottom or both, and repeated part-way down a long chart; month column on the left, right or both | Project → Chart layout and axes |
+| 2 | Period column: week numbers, months since a date (M1, M2…) or project years (Y1, Y2…), on either side | Project → Chart layout and axes |
+| 3 | Broken chainage (empty stretches squeezed to a gap with a break symbol) and chainage equations (where the kilometrage jumps) | Project → Chart layout and axes |
+| 4 | Tapered areas: the chainage range at the finish differs from the start | Style → Drawn as → Tapered area; the activity's "At the finish" fields |
+| 5 | Crew steps: a crew's activities joined into one stepped line | View → Crew steps; activity Crew field (or by WBS or style) |
+| 6 | Text notes at a chainage and date, any angle, optional box and leader line; drag to move | Insert → Text note |
+| 7 | Milestone lines with the label boxed in the middle | Time marker → Milestone label |
+| 8 | Side columns for design, approvals, procurement and other work with no chainage | Project → Chart layout and axes; activity Side column |
+| 9 | Scale note ("Approx. A3: 10 mm = 500 m") | Title block Scale cell; `{scale}` in text blocks |
+| 10 | Haul arrows between a cut and a fill area, labelled with the volume | Insert → Haul arrow |
+| 11 | Logic links from P6, straight or square-cornered, all / driving path only / only between styles | View → Logic links; Project → Chart layout and axes |
+
+### Bands above and below the chart (Project → Bands above and below the chart)
+
+| # | Feature | Data |
+|---|---|---|
+| 12 | Long section with cut and fill shaded | chainage, ground level, design level |
+| 13 | Quantities by section, bars and numbers | from, to, one column per quantity |
+| 14 | Package / contract extents with lengths | name, from, to, colour |
+| 15 | Schematic plan: track and structures from the location markers | none; tick the location types |
+| 16 | Strip: ground type, terrain, zones | from, to, label, colour |
+
+### Page layout
+
+| # | Feature | Where to find it |
+|---|---|---|
+| 17 | Summary block: start and finish, activity count, length by style, quantities, totals from quantity bands | Page layout → Add summary |
+| 20 | Calendar block: months with non-working days and stand-downs shaded | Page layout → Add calendar |
+| 27 | Several charts on one sheet: each chart block can show its own stretch and option, with a caption, and leave out bands or side panels | Page layout → chart block settings |
+| 9 | Charts on a page shrink their header rows and bands so the grid keeps at least half the height | Automatic |
+
+### Resources (Data → Resource histogram)
+
+| # | Feature | Notes |
+|---|---|---|
+| 18 | Weekly histogram beside the chart, stacked by series | From P6 resource assignments (budgeted units spread over each assignment's dates, by resource type or by resource) or pasted from Excel |
+| 19 | Weekly and running totals column | Tick "Weekly and running totals" |
+
+### Data in and out
+
+| # | Feature | Where to find it |
+|---|---|---|
+| 21 | Microsoft Project XML import: tasks, dates, WBS, custom fields for chainage, style from words in the task name (or a field or summary level), crew and line fields, links with lag | File or Data → Import Microsoft Project (XML) |
+| 22 | Logic links written to XER exports (TASKPRED) and read from an Excel register's Predecessors column ("A100, A110SS+2") | Automatic |
+| 23 | Line / track per activity: hide a line, or offset it a few pixels | Activity Line / track field; Project → Chart layout and axes |
+| 24 | Rate sheet to a sketch data set (finish worked out from length and rate), for comparison only | Data → Rate sheet to a sketch data set |
+| 25 | Progress lines (as built or forecast), stepped or straight | Data → Progress lines |
+| 28 | Fonts for non-Latin scripts (Thai, Chinese) in exports and video | Automatic font fallbacks |
+| 29 | Pins on the header image (aerial photo or map strip), placed by chainage | Location → Pin on the header image |
+
+## Still to do
+
+| # | Feature | Why it is not built yet |
+|---|---|---|
+| 26 | Live P6 connection (EPPM web services, Primavera Cloud, P6 Pro database) | Needs access to a P6 server to build and test against. A browser page cannot call a company P6 server directly (cross-site rules), so it goes through the optional Python server in `server/`. |
+| 22b | Logic links in TurboChart files | TurboChart's file format for relationships is not known yet; a sample .tchart that contains links is needed. |
+| – | Native .mpp files | A closed binary format a browser cannot read reliably; use MS Project's XML export. |

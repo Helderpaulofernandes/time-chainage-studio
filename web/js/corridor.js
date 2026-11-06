@@ -4,6 +4,7 @@
 import { geometry, styleMap, PAPER, chainageAxis, locSymbol, progressAt, progressInfo, isStoodDown, AREA, triPath } from "./render.js";
 import { DAY, DOW, esc, chFmt, lenFmt, niceDate, tms } from "./util.js";
 import { corridorDefaults } from "./core/model.js";
+import { onChart } from "./extras.js";
 
 const FONT = "IBM Plex Sans Condensed, Arial Narrow, Arial, sans-serif";
 const MONO = "IBM Plex Mono, Consolas, monospace";
@@ -48,7 +49,7 @@ export function corridorGeometry(p, { width = 1200, compact = false, laneHeight 
   const items = [];
   for (const a of p.activities) {
     if (a.dataset !== p.view.main_dataset) continue;
-    const li = laneOf[a.style]; if (li == null) continue;
+    const li = laneOf[a.style]; if (li == null || !onChart(p, a)) continue;
     const st = S[a.style] || {}, x0 = G.X(a.ch0_m), x1 = G.X(a.ch1_m), kind = st.kind || "line";
     items.push({ a, li, x0, x1, kind, col: st.colour || PAPER.muted, point: Math.abs(x1 - x0) < 1, tag: a.code || st.name || a.style || "" });
   }
@@ -170,7 +171,7 @@ export function corridorDynamic(p, C, t, opts = {}) {
     if (active) paused ? lane[li].paused++ : lane[li].active++;
     if (AREA.has(kind)) {
       const xa = Math.min(x0, x1), w = Math.max(3, Math.abs(x1 - x0)), y = yc - lh * 0.3, hh = lh * 0.6;
-      const shp = kind === "block" ? `<rect x="${f1(xa)}" y="${f1(y)}" width="${f1(w)}" height="${f1(hh)}"` : `<path d="${triPath(kind, xa, y, Math.max(6, w), hh)}" stroke-linejoin="round"`;
+      const shp = kind === "block" || kind === "taper" ? `<rect x="${f1(xa)}" y="${f1(y)}" width="${f1(w)}" height="${f1(hh)}"` : `<path d="${triPath(kind, xa, y, Math.max(6, w), hh)}" stroke-linejoin="round"`;
       if (future) acts += `${shp} fill="none" stroke="${col}" stroke-opacity="${(0.25 + 0.45 * (1 - (s - t) / look)).toFixed(2)}" stroke-dasharray="3 3"/>`;
       else if (done) acts += `${shp} fill="${col}" fill-opacity=".12"/>`;
       else { acts += `${shp} fill="url(#${C.pat[col]})" stroke="${col}" stroke-width="1"/>`; tagList.push({ li, x: xa + w / 2, text: it.tag, col }); }
