@@ -198,6 +198,7 @@ export function pageView(app) {
         panel.append(h("p", { class: "hint" }, "Each chart block can show its own stretch and option, so one sheet can hold the whole scope and regional close-ups."),
           h("div", { class: "row2" }, lbl("From (blank = project start)", h("input", { value: b.ch_from == null ? "" : mToCh(p, b.ch_from), onchange: e => upd("ch_from", e.target.value === "" ? null : chToM(p, e.target.value)) })),
             lbl("To (blank = project end)", h("input", { value: b.ch_to == null ? "" : mToCh(p, b.ch_to), onchange: e => upd("ch_to", e.target.value === "" ? null : chToM(p, e.target.value)) }))),
+          lbl("Saved view", selKV([["", "None (use the settings here)"], ...(p.views || []).map(v => [v.id, v.name])], b.view_id || "", v => upd("view_id", v || null))),
           lbl("Option shown", selKV([["", "The one on screen"], ...p.datasets.map(d => [d.id, d.name])], b.dataset || "", v => upd("dataset", v || null))),
           lbl("Caption", h("input", { value: b.caption || "", placeholder: "e.g. Northern region", onchange: e => upd("caption", e.target.value) })),
           h("label", { class: "chk" }, h("input", { type: "checkbox", checked: !!b.no_bands, onchange: e => upd("no_bands", e.target.checked) }), " Leave out the bands"),
@@ -279,8 +280,11 @@ export async function exportPng(p, dpi = 200) {
 // ------------------------------------------------------------------ chart blocks, scale, summary and calendar
 // A chart block can show its own stretch of chainage and its own option (data set).
 export function chartProject(p, b) {
-  if (b.ch_from == null && b.ch_to == null && !b.dataset && !b.no_bands && !b.no_side) return p;
-  let c = { ...p.chainage, start_m: b.ch_from ?? p.chainage.start_m, end_m: b.ch_to ?? p.chainage.end_m };
+  if (b.ch_from == null && b.ch_to == null && !b.dataset && !b.no_bands && !b.no_side && !b.view_id) return p;
+  const v = b.view_id ? (p.views || []).find(x => x.id === b.view_id) : null;
+  if (v) p = { ...p, time: { ...p.time, start: (v.t_from || p.time.start).slice(0, 10), finish: (v.t_to || p.time.finish).slice(0, 10), orientation: v.orientation || p.time.orientation },
+    view: { ...p.view, hidden_styles: v.hidden_styles || [] } };
+  let c = { ...p.chainage, start_m: b.ch_from ?? v?.ch_from ?? p.chainage.start_m, end_m: b.ch_to ?? v?.ch_to ?? p.chainage.end_m };
   if (!(c.end_m > c.start_m)) c = p.chainage;
   return { ...p, chainage: c, bands: b.no_bands ? [] : p.bands, side_cols: b.no_side ? (p.side_cols || []).map(c => ({ ...c, show: false })) : p.side_cols,
     resources: b.no_side && p.resources ? { ...p.resources, panel: { ...(p.resources.panel || {}), show: false } } : p.resources,

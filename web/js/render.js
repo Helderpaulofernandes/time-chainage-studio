@@ -68,7 +68,7 @@ export function geometry(p, opts = {}) {
   const bh = b => Math.max(16, bandHeight(b, compact) * squeeze);
   const aboveTop = rowsTop + rowH.reduce((a, b) => a + b, 0);
   const aboveH = bands.filter(b => b.position === "above").reduce((n, b) => n + bh(b) + 6, 0);
-  const axTop = c.axis !== "bottom", axBot = c.axis !== "top";
+  const ax = c.axis || "both", axTop = ax === "both" || ax === "top", axBot = ax === "both" || ax === "bottom";
   const top = aboveTop + aboveH + (axTop ? AX : 8);
   const t0 = tms(T.start), t1 = tms(T.finish) + DAY;
   const nd = Math.max(1, (t1 - t0) / DAY);
@@ -141,6 +141,7 @@ export function marksSvg(kind, x0, y0, x1, y1, col, width = 2, spacing = 22, ext
 export const FILLS = [["solid", "Solid"], ["hatch", "Hatched"], ["crosshatch", "Cross-hatched"], ["dots", "Dotted"], ["none", "Outline only"]];
 export function areaPaint(st, col, defs) {
   const pat = st.fill_pattern || "solid", op = st.fill_opacity ?? 0.35;
+  if (st.fill_colour && col === st.colour) col = st.fill_colour; // a style can fill with its own colour (outline in the line colour)
   if (pat === "none") return `fill="${col}" fill-opacity="0"`;
   if (pat === "solid" || !defs) return `fill="${col}" fill-opacity="${op}"`;
   const id = `fp-${pat}-${String(col).replace(/[^0-9a-z]/gi, "")}-${Math.round(op * 100)}`;
@@ -559,7 +560,8 @@ export function chainageAxis(p, G, y, topSide, inline = false) {
 export function legendItems(p) {
   const view = p.view || {};
   const used = new Set(p.activities.filter(a => a.dataset === view.main_dataset).map(a => a.style));
-  const styles = p.styles.filter(s => used.has(s.code) && s.legend !== false);
+  const hidden = new Set(view.hidden_styles || []);
+  const styles = p.styles.filter(s => used.has(s.code) && s.legend !== false && !hidden.has(s.code));
   const ltypes = [...new Set(p.locations.map(l => l.type))].map(id => p.location_types.find(t => t.id === id)).filter(Boolean);
   const mk = [...new Set(p.time_markers.map(m => (m.kind === "milestone" || !m.finish ? "milestone" : m.kind)))];
   return { styles, ltypes, mk };

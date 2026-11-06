@@ -14,6 +14,7 @@ export const PALETTE = ["#C65911", "#1F4E79", "#548235", "#7030A0", "#BF8F00", "
 // An activity placed in a side column, or on a track that is switched off, is not drawn on the grid. If its column is
 // deleted it comes back onto the grid at its chainage.
 export function onChart(p, a) {
+  if ((p.view.hidden_styles || []).includes(a.style)) return false;
   if (a.col && (p.side_cols || []).some(s => s.id === a.col)) return false; // in a column (shown or hidden), never on the grid
   if (a.track) { const tr = (p.tracks || []).find(x => x.name === a.track); if (tr && tr.show === false) return false; }
   return true;

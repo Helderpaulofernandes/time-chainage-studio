@@ -43,7 +43,8 @@ Then open http://localhost:8765. The Python server in `server/` also offers the 
 | P6 XER import with field mapping (dates, start/end chainage, style, filter) and preview | done |
 | P6 sync: re-read a newer XER with the saved mapping, change report, keeps local styling | done |
 | P6 XER export (Start Chainage, End Chainage, Activity Style UDFs; 24 h 7-day calendar) | done |
-| TurboChart .tchart import and export (all data sets, comparison chart) | done |
+| TurboChart .tchart import and export: opens on the active chart, every chart as a saved view, fill colours, axis and timeline settings | done |
+| Saved views (stretch, dates, hidden styles), style fill colours | done |
 | Page layout (paper, margins, title, title block, chart, legend, notes), print, SVG/PNG export | done |
 | Playback: View → Play the programme runs a date line down the chart; work fronts and crew positions move, done work fills in, future work stays faint | done |
 | Playback export: an MP4 video (720p, 1080p or 4K, any length) or a PNG of any moment, made in the browser | done |

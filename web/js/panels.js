@@ -52,7 +52,7 @@ export function chartLayout(app) {
       el.append(
         h("div", { class: "cols" },
           h("fieldset", {}, h("legend", {}, "Axes and dates"),
-            h("div", { class: "row2" }, field(`${ch[0].toUpperCase() + ch.slice(1)} scale`, sel([["both", "Top and bottom"], ["top", "Top only"], ["bottom", "Bottom only"]], w.axis, set("axis"))),
+            h("div", { class: "row2" }, field(`${ch[0].toUpperCase() + ch.slice(1)} scale`, sel([["both", "Top and bottom"], ["top", "Top only"], ["bottom", "Bottom only"], ["none", "None"]], w.axis, set("axis"))),
               field("Repeat the scale every (days)", h("input", { type: "number", min: 0, step: 1, value: w.repeat, onchange: e => (w.repeat = +e.target.value || 0) }), "0 = off. Handy on long charts.")),
             h("div", { class: "row2" }, field("Month column", sel([["left", "Left"], ["right", "Right"], ["both", "Both sides"]], w.mon, set("mon"))),
               field("Period column", sel([["weeks", "Week numbers"], ["months", "Months since the start (M1, M2…)"], ["years", "Project years (Y1, Y2…)"], ["none", "None"]], w.per, set("per")))),
@@ -322,5 +322,49 @@ export function msProjectDialog(app) {
       close(); app.changed();
       app.toast(`${r.activities.length} activities imported${r.skipped.no_chainage ? `, ${r.skipped.no_chainage} without chainage left out` : ""}. Links: ${r.activities.reduce((n, a) => n + (a.links || []).length, 0)}.`);
     } }],
+  });
+}
+
+// ------------------------------------------------------------------ saved views
+// A view is a named stretch of chainage and dates, with some styles hidden (TurboChart calls these charts).
+export function currentView(p, name) {
+  return { id: uid("v_"), name, ch_from: p.chainage.start_m, ch_to: p.chainage.end_m, t_from: p.time.start, t_to: p.time.finish,
+    hidden_styles: [...(p.view.hidden_styles || [])], orientation: p.time.orientation, dataset: p.view.main_dataset };
+}
+export function applyView(p, v) {
+  if (v.ch_from != null && v.ch_to != null && v.ch_to > v.ch_from) Object.assign(p.chainage, { start_m: v.ch_from, end_m: v.ch_to });
+  if (v.t_from && v.t_to && v.t_to > v.t_from) Object.assign(p.time, { start: v.t_from.slice(0, 10), finish: v.t_to.slice(0, 10) });
+  if (v.orientation) p.time.orientation = v.orientation;
+  p.view.hidden_styles = [...(v.hidden_styles || [])];
+  if (v.dataset && p.datasets.some(d => d.id === v.dataset)) p.view.main_dataset = v.dataset;
+  p.view.current_view = v.id;
+}
+export function viewsDialog(app) {
+  const p = app.p;
+  modal({
+    title: "Saved views", wide: true,
+    body: el => {
+      const box = h("div");
+      const draw = () => {
+        box.innerHTML = "";
+        const views = p.views || [];
+        if (!views.length) box.append(h("p", { class: "hint" }, "No saved views yet."));
+        else box.append(h("table", { class: "grid-tbl" }, h("thead", {}, h("tr", {}, ...["Name", chName(p), "Dates", "Hidden styles", ""].map(x => h("th", {}, x)))),
+          h("tbody", {}, ...views.map((v, i) => h("tr", {},
+            h("td", {}, h("input", { value: v.name, onchange: e => { app.commit(); v.name = e.target.value; app.changed(false); } })),
+            h("td", {}, `${chFmt(p, v.ch_from)} – ${chFmt(p, v.ch_to)}`),
+            h("td", {}, `${niceDate(tms(v.t_from))} – ${niceDate(tms(v.t_to))}`),
+            h("td", {}, String((v.hidden_styles || []).length)),
+            h("td", {}, h("div", { class: "btns" },
+              h("button", { type: "button", class: "small primary", onclick: () => { app.commit(); applyView(p, v); app.changed(); draw(); app.toast(`Showing "${v.name}"`); } }, p.view.current_view === v.id ? "Showing" : "Show"),
+              h("button", { type: "button", class: "small", onclick: () => { app.commit(); Object.assign(v, { ...currentView(p, v.name), id: v.id }); app.changed(false); draw(); } }, "Update to what's on screen"),
+              h("button", { type: "button", class: "danger small", onclick: () => { app.commit(); views.splice(i, 1); app.changed(false); draw(); } }, "Delete"))))))));
+      };
+      el.append(h("p", { class: "hint" }, "A view keeps a stretch of chainage, a date range and which styles are hidden, so you can switch between the whole job and close-ups. Page layout chart blocks can each show a saved view. TurboChart charts come in as views."), box,
+        h("div", { class: "row2" }, field("Name for the view on screen", h("input", { id: "sv-name", value: "View " + ((p.views || []).length + 1) })),
+          h("div", { class: "btns", style: "align-self:end" }, h("button", { type: "button", onclick: () => { app.commit(); (p.views ||= []).push(currentView(p, $("#sv-name", el).value || "View")); app.changed(false); draw(); } }, "Save the current view"))));
+      draw();
+    },
+    buttons: [{ label: "Close" }],
   });
 }

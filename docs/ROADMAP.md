@@ -63,11 +63,15 @@ The app stays a **display of the programme** from P6 or Microsoft Project: nothi
 | 25 | Progress lines (as built or forecast), stepped or straight | Data → Progress lines |
 | 28 | Fonts for non-Latin scripts (Thai, Chinese) in exports and video | Automatic font fallbacks |
 | 29 | Pins on the header image (aerial photo or map strip), placed by chainage | Location → Pin on the header image |
+| – | Saved views: a named stretch, date range and hidden styles; switch between them, or show one in a page chart block | View → Saved views |
+| – | Style fill colour separate from the line colour, and styles hidden from the chart | Style → Fill colour, Show on the chart |
+| – | TurboChart import opens on the file's active chart with its axis and timeline settings; every TurboChart chart becomes a saved view; fill colours and per-task labels come across, and go back out on export | File → Import TurboChart |
 
 ## Still to do
 
 | # | Feature | Why it is not built yet |
 |---|---|---|
 | 26 | Live P6 connection (EPPM web services, Primavera Cloud, P6 Pro database) | Needs access to a P6 server to build and test against. A browser page cannot call a company P6 server directly (cross-site rules), so it goes through the optional Python server in `server/`. |
-| 22b | Logic links in TurboChart files | TurboChart's file format for relationships is not known yet; a sample .tchart that contains links is needed. |
+| – | Logic links in TurboChart files | TurboChart files do not store relationships (checked against a real project file), so there is nothing to read or write. |
+| – | TurboChart annotations | They are stored as pictures placed by screen position, so they cannot be placed on our chart reliably. Add them again as text notes. |
 | – | Native .mpp files | A closed binary format a browser cannot read reliably; use MS Project's XML export. |

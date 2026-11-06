@@ -42,17 +42,18 @@ export function exportTchart(p) {
     const id = gid(), c = col(s.colour), block = s.kind === "block" || s.kind === "cut" || s.kind === "fill"; // TurboChart gets cut / fill as filled blocks
     const cv = { FontSize: Math.round(s.label.size || 11), Id: id, Legend: s.legend !== false, OrderCanvas: 1, OrderLegend: i + 1, PositionOffset: 0, ShowText: !!s.label.show,
       TextColour: black, TextHorzAlign: 0, TextVertAlign: 0, Transparency: 0, Visible: true };
-    lib.push({ ChartValues: cv, Description: s.name, DistanceOffset: 10, EndShape: { FillColour: c, ShapeType: 0, Size: 10 }, FillColour: block ? c : white, FillLineColour: c,
-      FillLineSpacing: 10, FillLineThickness: 2, FillType: block ? 1 : 0, FontSize: Math.round(s.label.size || 11), Id: id, Legend: s.legend !== false, LineColour: c,
+    const fc = col(s.fill_colour || s.colour), hatch = ["hatch", "crosshatch"].includes(s.fill_pattern);
+    lib.push({ ChartValues: cv, Description: s.name, DistanceOffset: 10, EndShape: { FillColour: c, ShapeType: 0, Size: 10 }, FillColour: block ? fc : white, FillLineColour: block ? fc : c,
+      FillLineSpacing: 10, FillLineThickness: 2, FillType: block && hatch ? 1 : 0, FontSize: Math.round(s.label.size || 11), Id: id, Legend: s.legend !== false, LineColour: c,
       LineStyle: (s.dash || "solid") === "solid" ? 0 : 1, LineThickness: s.width || 2, Name: s.code, OrderCanvas: 1, OrderLegend: i + 1, PositionOffset: 0, ShowText: !!s.label.show,
       StartShape: { FillColour: c, ShapeType: 0, Size: 10 }, TextColour: black, TextHorzAlign: 0, TextVertAlign: 0, TimeOffset: 20,
       Transparency: block ? Math.round((1 - (s.fill_opacity ?? 0.35)) * 100) / 100 : 0, Type: block ? 1 : 0, Visible: true });
-    vals.push({ Key: id, Value: cv });
+    vals.push({ Key: id, Value: cv }); s._tcid = id;
   });
   const dsIds = Object.fromEntries(p.datasets.map(d => [d.id, gid()]));
   const tasks = p.activities.filter(a => dsIds[a.dataset]).map(a => ({ CalendarCode: "", Critical: !!(a.p6 || {}).driving, DataSetId: dsIds[a.dataset], Description: a.name,
     EndPosition: pos(a.ch1_m), ExternalId: (a.p6 || {}).task_id || null, FilterCode: a.wbs || "", FinishDate: toTc(a.finish, tz), Id: gid(), LocationCode: "", Name: a.code,
-    Order: 0, ShapeCode: a.style, ShowText: null, SourceTask: null, StartDate: toTc(a.start, tz), StartPosition: pos(a.ch0_m) }));
+    Order: 0, ShapeCode: a.style, ShowText: a.label && a.label.show != null ? !!a.label.show : null, SourceTask: null, StartDate: toTc(a.start, tz), StartPosition: pos(a.ch0_m) }));
   const loc = (name, text, s, e, row, rot, fg) => ({ Background: clear, BorderLineColour: grey, BorderLineThickness: 1, EndLineColour: grey, EndLineStyle: 0, EndLineThickness: 0,
     EndPosition: e, FontSize: row <= 2 ? 12 : 9, Id: gid(), Name: name, NewVersion: true, Rotate: rot, Row: row, StartLineColour: grey, StartLineStyle: 0, StartLineThickness: 1,
     StartPosition: s, Text: text, TextColour: fg });
@@ -79,19 +80,30 @@ export function exportTchart(p) {
   const top = im ? { FitTopImage: full, ImageBase64: im[2], ShowTopImage: hi.show !== false, TopImageStartPosition: full ? 0 : pos(hi.ch_start_m ?? p.chainage.start_m),
     TopImageEndPosition: full ? 0 : pos(hi.ch_end_m ?? p.chainage.end_m), MaxImagePercentage: 30 }
     : { FitTopImage: false, ImageBase64: null, ShowTopImage: false, TopImageStartPosition: 0, TopImageEndPosition: 0, MaxImagePercentage: 20 };
-  const t0 = p.time.start + "T00:00", t1 = fmtT(parseT(p.time.finish) + DAY), cLo = pos(p.chainage.start_m), cHi = pos(p.chainage.end_m);
-  const chart = (name, ds1, ds2) => ({ AllowDragging: false, AllowTaskCreation: false, Annotations: [], ChartName: name, ChartSpecificShapeValues: vals, CriticalityColour: col("#FF0000"),
+  const ax = p.chainage.axis || "both", ms = p.time.month_side || "left";
+  const chart = (name, ds1, ds2, v = null) => {
+    const t0 = (v?.t_from || p.time.start).slice(0, 10) + "T00:00", t1 = fmtT(parseT((v?.t_to || p.time.finish).slice(0, 10)) + DAY);
+    const cLo = pos(v?.ch_from ?? p.chainage.start_m), cHi = pos(v?.ch_to ?? p.chainage.end_m), hide = new Set(v ? v.hidden_styles || [] : p.view.hidden_styles || []);
+    const sv = p.styles.map(s => ({ Key: s._tcid, Value: { ...vals.find(x => x.Key === s._tcid).Value, Visible: !hide.has(s.code) } }));
+    return { AllowDragging: false, AllowTaskCreation: false, Annotations: [], ChartName: name, ChartSpecificShapeValues: sv, CriticalityColour: col("#FF0000"),
     CriticalityOpacity: 0.9, CriticalityThickness: 4, CustomPageHeight: 0, CustomPageWidth: 0, DataSet1Id: ds1, DataSet2Blend: ds2 ? 0.2 : 0, DataSet2Colour: grey, DataSet2Id: ds2 || ZERO,
     DataSet2Offset: 0, DataSet2Transparency: ds2 ? 0.6 : 0.5, DataSet3Blend: 0, DataSet3Colour: col("#008000"), DataSet3Id: ZERO, DataSet3Offset: 0, DataSet3Transparency: 0.5,
     EndFilter: toTc(t1, tz), EndPosition: cHi, FitToScreen: true, HideCalendars: false, HideTasks: false, HighLighters: hls, Id: gid(), ImagePath: null, IsPrintPreview: false,
     LineStyleMonth: 0, LineStylePosition: 0, LineStyleWeek: 0, LineStyleYear: 0, LocationRows: Array(10).fill(true), MonthTimelineAxisLineColour: col("#D9D9D9"),
     MonthTimelineThickness: 1, PositionAxisColour: white, PositionAxisFontSize: 12, PositionAxisLineColour: axis, PositionAxisTextColour: ink, PositionLineThickness: 1,
-    PositionScaleUnits: pos(p.chainage.major_m), ReverseDates: p.time.orientation === "up", ReversePosition: !!p.chainage.reverse, RotateChart: false, Show1: true, Show2: !!ds2,
+    PositionScaleUnits: pos(p.chainage.major_m), ReverseDates: (v?.orientation || p.time.orientation) === "up", ReversePosition: !!p.chainage.reverse, RotateChart: false, Show1: true, Show2: !!ds2,
     Show3: false, ShowAnnotations: true, ShowCritcal: false, ShowCritcal2: false, ShowCritcal3: false, ShowDataSetText2: false, ShowDataSetText3: false, ShowHighlighters: true,
-    ShowLegend: true, ShowLocationGridBottom: false, ShowLocationGridTop: true, ShowPositionBottom: true, ShowPositionTop: false, ShowTimelineLeft: true, ShowTimelineRight: true,
-    ShowWeekNumber: true, StartFilter: toTc(t0, tz), StartPosition: cLo, StartWeek: 0, TimeScaleUnits: 2, TimelineAxisColour: white, TimelineAxisFontSize: 12,
-    TimelineAxisTextColour: ink, WeekTimelineAxisLineColour: axis, WeekTimelineThickness: 1, YearTimelineAxisLineColour: col("#404040"), YearTimelineThickness: 2, Zoom: 1, ...top });
-  const charts = p.datasets.map(d => chart(d.name, dsIds[d.id]));
+    ShowLegend: true, ShowLocationGridBottom: false, ShowLocationGridTop: true, ShowPositionBottom: ax === "both" || ax === "bottom", ShowPositionTop: ax === "both" || ax === "top",
+    ShowTimelineLeft: ms !== "right", ShowTimelineRight: ms !== "left", ShowWeekNumber: (p.time.period_labels || "weeks") === "weeks", StartFilter: toTc(t0, tz), StartPosition: cLo, StartWeek: 0,
+    TimeScaleUnits: 2, TimelineAxisColour: white, TimelineAxisFontSize: 12,
+    TimelineAxisTextColour: ink, WeekTimelineAxisLineColour: axis, WeekTimelineThickness: 1, YearTimelineAxisLineColour: col("#404040"), YearTimelineThickness: 2, Zoom: 1, ...top };
+  };
+  // the view on screen first (it becomes the active chart), then each saved view, then one chart per data set
+  const charts = [chart(p.views?.find(v => v.id === p.view.current_view)?.name || "Current view", dsIds[p.view.main_dataset])];
+  for (const v of p.views || []) if (v.id !== p.view.current_view) charts.push(chart(v.name, dsIds[v.dataset] || dsIds[p.view.main_dataset], null, v));
+  p.datasets.forEach(d => { if (d.id !== p.view.main_dataset) charts.push(chart(d.name, dsIds[d.id])); });
+  p.styles.forEach(s => delete s._tcid);
+  const t0 = p.time.start + "T00:00", t1 = fmtT(parseT(p.time.finish) + DAY), cLo = pos(p.chainage.start_m), cHi = pos(p.chainage.end_m);
   const cmp = p.view.compare_dataset;
   if (cmp && dsIds[cmp]) {
     const nm = id => (p.datasets.find(d => d.id === id) || {}).name || "";
@@ -139,7 +151,9 @@ export function importTchart(text, unitHint = "auto", tz = "Australia/Melbourne"
   const suffix = String(doc.PositionSuffix || "").trim().toLowerCase();
   const unit = ["m", "km", "ft", "mi"].includes(unitHint) ? unitHint : ["km", "ft", "mi"].includes(suffix) ? suffix : "m", k = unitFactor(unit);
   const title = ((doc.Properties || []).find(x => x.Key === "ProjectTitle") || {}).Value || "TurboChart import";
-  const c0 = (doc.Charts || [{}])[0] || {};
+  // open on the chart the file was saved on (TurboChart's active chart), not simply the first one
+  const charts = doc.Charts || [];
+  const c0 = charts.find(c => c.Id === doc.ActiveChartId) || charts[0] || {};
   const p = newProject(title, "other", (c0.StartPosition || 0) * k, (c0.EndPosition || 1000) * k, null, null, unit);
   p.meta.title = title;
   p.datasets = (doc.DataSets || []).map(d => ({ id: newId("ds_"), name: d.Name || "Data set", source: "tchart", tc_id: d.Id }));
@@ -147,17 +161,44 @@ export function importTchart(text, unitHint = "auto", tz = "Australia/Melbourne"
   const byTc = Object.fromEntries(p.datasets.map(d => [d.tc_id, d.id]));
   p.view.main_dataset = byTc[c0.DataSet1Id] || p.datasets[0].id;
   if (c0.Show2 && byTc[c0.DataSet2Id]) p.view.compare_dataset = byTc[c0.DataSet2Id];
-  p.styles = (doc.Library || []).map(l => { const s = makeStyle(l.Name || "S", l.Description || l.Name || "", l.Type === 1 ? "block" : "line", hex(l.LineColour));
-    s.width = l.LineThickness || s.width; s.dash = l.LineStyle ? "dash" : "solid"; s.label.show = !!l.ShowText; return s; });
+  const libCode = {};
+  p.styles = (doc.Library || []).map(l => { const block = l.Type === 1, s = makeStyle(l.Name || "S", l.Description || l.Name || "", block ? "block" : "line", hex(l.LineColour));
+    s.width = l.LineThickness || s.width; s.dash = l.LineStyle ? "dash" : "solid"; s.label.show = !!l.ShowText; libCode[l.Id] = s.code;
+    if (block) { // blocks keep their own fill colour and opacity; FillType 1 is a hatched fill
+      const fc = hex(l.FillColour); if (fc !== "#FFFFFF" || !l.FillType) s.fill_colour = fc;
+      s.fill_opacity = Math.max(0, Math.min(1, 1 - (+l.Transparency || 0)));
+      if (l.FillType === 1) { s.fill_pattern = "hatch"; s.fill_colour = hex(l.FillLineColour || l.LineColour); }
+    }
+    return s; });
   const known = new Set(p.styles.map(s => s.code)), times = [];
   for (const t of doc.Tasks || []) {
     const s = fromTc(t.StartDate, tz), f = fromTc(t.FinishDate, tz); if (!s || !f) continue;
     const code = t.ShapeCode || "TC";
     if (!known.has(code)) { p.styles.push(makeStyle(code, code, "line", "#1F6E8C")); known.add(code); }
-    p.activities.push(makeActivity(byTc[t.DataSetId] || p.datasets[0].id, t.Name || "", t.Description || "", s, f, (t.StartPosition || 0) * k, (t.EndPosition || 0) * k, code, { wbs: t.FilterCode || "" }));
+    p.activities.push(makeActivity(byTc[t.DataSetId] || p.datasets[0].id, t.Name || "", t.Description || "", s, f, (t.StartPosition || 0) * k, (t.EndPosition || 0) * k, code,
+      { wbs: t.FilterCode || "", label: t.ShowText == null ? null : { show: !!t.ShowText }, p6: t.Critical ? { driving: true } : null }));
     times.push(s, f);
   }
   if (times.length) { times.sort(); p.time.start = times[0].slice(0, 10); p.time.finish = times.at(-1).slice(0, 10); }
+  // every TurboChart chart becomes a saved view; the active one sets what is on screen
+  const viewOf = c => {
+    const a = fromTc(c.StartFilter, tz), b = fromTc(c.EndFilter, tz);
+    return { id: newId("v_"), name: c.ChartName || "Chart", ch_from: (c.StartPosition || 0) * k, ch_to: (c.EndPosition || 0) * k,
+      t_from: a && b && b > a ? a.slice(0, 10) : p.time.start, t_to: a && b && b > a ? b.slice(0, 10) : p.time.finish, orientation: c.ReverseDates ? "up" : "down",
+      hidden_styles: (c.ChartSpecificShapeValues || []).filter(x => x.Value && x.Value.Visible === false).map(x => libCode[x.Key]).filter(Boolean),
+      dataset: byTc[c.DataSet1Id] || null, tc_id: c.Id };
+  };
+  p.views = charts.map(viewOf);
+  const av = p.views.find(v => v.tc_id === c0.Id);
+  if (av) {
+    if (av.ch_to > av.ch_from) { p.chainage.start_m = av.ch_from; p.chainage.end_m = av.ch_to; }
+    p.time.start = av.t_from; p.time.finish = av.t_to; p.time.orientation = av.orientation; p.view.hidden_styles = av.hidden_styles; p.view.current_view = av.id;
+  }
+  p.chainage.reverse = !!c0.ReversePosition;
+  p.chainage.axis = c0.ShowPositionTop && c0.ShowPositionBottom ? "both" : c0.ShowPositionTop ? "top" : c0.ShowPositionBottom ? "bottom" : "none";
+  p.time.month_side = c0.ShowTimelineLeft === false && c0.ShowTimelineRight ? "right" : c0.ShowTimelineLeft && c0.ShowTimelineRight ? "both" : "left";
+  p.time.period_labels = c0.ShowWeekNumber === false ? "none" : "weeks";
+  p.tc_import = { annotations: charts.reduce((n, c) => n + (c.Annotations || []).length, 0) };
   p.location_types.push({ id: "tc", name: "TurboChart location", symbol: "band", colour: "#5D6B70", row: 2, grid: false });
   for (const l of doc.Locations || []) {
     const a = (l.StartPosition || 0) * k, b = (l.EndPosition ?? l.StartPosition ?? 0) * k;
