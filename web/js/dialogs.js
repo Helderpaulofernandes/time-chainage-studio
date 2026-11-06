@@ -401,40 +401,80 @@ export function productivities(app) {
 // ------------------------------------------------------------------ playback video
 export function videoDialog(app, { t0, t1, mode = "both", header = true, onDone }) {
   const iso = ms => new Date(ms).toISOString().slice(0, 10);
-  let cancel = false, busy = false, url = null, timer = 0, D0 = null;
-  // small live preview of one frame with the current choices; the slider picks the moment within From–To
+  const V = app.p.view.video, I = V.intro, O = V.outro, Mu = V.music;
+  let cancel = false, busy = false, url = null, timer = 0, D0 = null, music = null, audioUrl = null;
+  const chk = (dlg, id) => $("#" + id, dlg).checked;
+  const bgOpts = [["white", "White"], ["brand", "Brand colour"], ["black", "Black"]];
+  // the intro / outro settings as entered (false when switched off)
+  const introOf = dlg => chk(dlg, "vi-on") && { seconds: +val(dlg, "vi-sec") || 4, bg: val(dlg, "vi-bg"), title: val(dlg, "vi-title").trim(), subtitle: val(dlg, "vi-sub").trim(), details: chk(dlg, "vi-det") };
+  const outroOf = dlg => chk(dlg, "vo-on") && { seconds: +val(dlg, "vo-sec") || 3, bg: val(dlg, "vo-bg"), title: val(dlg, "vi-title").trim(), subtitle: val(dlg, "vi-sub").trim(), details: chk(dlg, "vo-det"), line: val(dlg, "vo-line").trim() };
+  // small live preview: a frame at the slider's date, or the intro / outro card as it looks when fully faded in
   const preview = async () => {
     const dlg = D0; if (!dlg || !dlg.isConnected) return;
     const a = Date.parse(val(dlg, "vd-from")), b = Date.parse(val(dlg, "vd-to")) + 864e5;
     if (!(b > a)) return;
-    const [W, H] = val(dlg, "vd-size").split("x").map(Number), t = a + (b - a) * (+val(dlg, "vd-at") / 1000);
-    const { frameSvg } = await import("./video.js");
-    const svg = frameSvg(app.p, t, W, H, { mode: val(dlg, "vd-mode"), header: $("#vd-head", dlg).checked, weeks: +val(dlg, "vd-win"), phase: 0.3 });
+    const [W, H] = val(dlg, "vd-size").split("x").map(Number), t = a + (b - a) * (+val(dlg, "vd-at") / 1000), what = val(dlg, "vd-what");
+    const { frameSvg, cardSvg, cardBg } = await import("./video.js");
+    let svg;
+    const card = what === "intro" ? introOf(dlg) || { bg: "white" } : what === "outro" ? outroOf(dlg) || { bg: "white" } : null;
+    if (card) svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><rect width="${W}" height="${H}" fill="${cardBg(app.p, card.bg)}"/>${cardSvg(app.p, W, H, "logo", card)}${cardSvg(app.p, W, H, "text", card)}</svg>`;
+    else svg = frameSvg(app.p, t, W, H, { mode: val(dlg, "vd-mode"), header: chk(dlg, "vd-head"), weeks: +val(dlg, "vd-win"), phase: 0.3 });
     if (url) URL.revokeObjectURL(url);
     url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
     const img = $("#vd-prev", dlg); img.src = url; img.style.aspectRatio = `${W} / ${H}`;
-    $("#vd-at-date", dlg).textContent = niceDate(t);
+    $("#vd-at", dlg).disabled = !!card;
+    $("#vd-at-date", dlg).textContent = card ? "" : niceDate(t);
   };
   const later = () => { clearTimeout(timer); timer = setTimeout(preview, 120); };
+  const num = (id, v, min, max, step = 0.5) => inp(id, v, { type: "number", min, max, step });
   const md = modal({
-    title: "Export playback video",
+    title: "Export playback video", wide: true,
     body: el => el.append(
       h("p", { class: "hint" }, "Records the playback of the option shown on the chart, with the date and the legend on every frame. The video is made on your PC; nothing is uploaded."),
+      h("div", { class: "vd-grid" }, h("div", { class: "vd-left" },
       h("div", { class: "row2" }, field("From", inp("vd-from", iso(t0), { type: "date" })), field("To", inp("vd-to", iso(t1), { type: "date" }))),
       h("div", { class: "row2" },
-        field("Video length (seconds)", inp("vd-len", 20, { type: "number", min: 3, max: 300, step: 1 }), "The whole period plays in this time, then the last frame holds for 2 s."),
+        field("Playback length (seconds)", inp("vd-len", 20, { type: "number", min: 3, max: 300, step: 1 }), "The whole period plays in this time. The intro and outro are added to it."),
         field("Size", sel("vd-size", [["1920x1080", "1920 × 1080 (Full HD)"], ["1280x720", "1280 × 720"], ["3840x2160", "3840 × 2160 (4K, slow)"]], "1920x1080"))),
       h("div", { class: "row2" },
         field("View", sel("vd-mode", [["both", "Both: corridor above the chart"], ["chart", "Chart only"], ["corridor", "Corridor only"]], mode)),
         field("Chart shows", sel("vd-win", [["0", "The whole programme"], ["6", "6 weeks, following the date"], ["13", "13 weeks, following the date"], ["26", "26 weeks, following the date"], ["52", "52 weeks, following the date"]], mode === "both" ? "13" : "0"),
           "Following the date keeps the chart readable when the corridor shares the frame.")),
       h("label", { class: "chk" }, h("input", { type: "checkbox", id: "vd-head", checked: header }), " Chart header (sections and locations above the chart)"),
-      h("label", { class: "chk" }, h("input", { type: "checkbox", id: "vd-intro", checked: true }),
-        app.p.brand && app.p.brand.logo ? " Intro and outro: the logo fades in, then the project name, then the chart (adds 7 s)" : " Intro and outro with the project name (adds 7 s). Add a logo under Project → Branding."),
+      h("details", { class: "vd-sec", open: true }, h("summary", {}, "Intro"),
+        h("label", { class: "chk" }, h("input", { type: "checkbox", id: "vi-on", checked: I.on !== false }),
+          app.p.brand && app.p.brand.logo ? " Start with the logo fading in, then the project name, then the chart" : " Start with the project name, then the chart (add a logo under Project → Branding)"),
+        h("div", { class: "row3" }, field("Length (s)", num("vi-sec", I.seconds ?? 4, 2, 15)), field("Background", sel("vi-bg", bgOpts, I.bg || "white")),
+          h("label", { class: "chk", style: "align-self:end" }, h("input", { type: "checkbox", id: "vi-det", checked: I.details !== false }), " Client / contract line")),
+        h("div", { class: "row2" }, field("Title", inp("vi-title", I.title || "", { placeholder: app.p.meta.title || app.p.name })),
+          field("Subtitle", inp("vi-sub", I.subtitle || "", { placeholder: "Project subtitle and option" })))),
+      h("details", { class: "vd-sec" }, h("summary", {}, "Outro"),
+        h("label", { class: "chk" }, h("input", { type: "checkbox", id: "vo-on", checked: O.on !== false }), " End by crossfading back to the logo and title card, then fading out"),
+        h("div", { class: "row3" }, field("Length (s)", num("vo-sec", O.seconds ?? 3, 2, 15)), field("Background", sel("vo-bg", bgOpts, O.bg || "white")),
+          h("label", { class: "chk", style: "align-self:end" }, h("input", { type: "checkbox", id: "vo-det", checked: O.details !== false }), " Client / contract line")),
+        field("Closing line", inp("vo-line", O.line || "", { placeholder: "e.g. website, contact or “Programme rev A”" }))),
+      h("details", { class: "vd-sec" }, h("summary", {}, "Music"),
+        h("p", { class: "hint" }, "Choose an audio file each time you export (MP3, M4A, WAV, OGG). It loops if it is shorter than the video. Use music you have the rights to."),
+        h("div", { class: "row2" },
+          field("Music file", h("input", { type: "file", id: "vm-file", accept: "audio/*", onchange: async e => {
+            const f = e.target.files[0], info = $("#vm-info", D0), au = $("#vm-play", D0);
+            music = null; if (audioUrl) URL.revokeObjectURL(audioUrl); au.hidden = true;
+            if (!f) { info.textContent = ""; return; }
+            info.textContent = "Reading…";
+            try { const { decodeAudio } = await import("./video.js"); music = await decodeAudio(f);
+              info.textContent = `${f.name} · ${Math.floor(music.duration / 60)}:${String(Math.round(music.duration % 60)).padStart(2, "0")}`;
+              audioUrl = URL.createObjectURL(f); au.src = audioUrl; au.hidden = false;
+            } catch (err) { info.textContent = err.message; }
+          } }), h("small", { id: "vm-info" })),
+          h("audio", { id: "vm-play", controls: true, hidden: true, style: "width:100%;align-self:end" })),
+        h("div", { class: "row4" }, field("Volume (%)", num("vm-vol", Math.round((Mu.volume ?? 0.8) * 100), 0, 100, 5)), field("Fade in (s)", num("vm-fi", Mu.fade_in ?? 1, 0, 20)),
+          field("Fade out (s)", num("vm-fo", Mu.fade_out ?? 3, 0, 20)), field("Start from (s)", num("vm-at", Mu.start_at ?? 0, 0, 3600, 1)))),
+      ), h("div", { class: "vd-right" },
       h("div", { class: "vd-preview" },
         h("img", { id: "vd-prev", alt: "Preview of a video frame" }),
-        h("div", { class: "vd-at" }, h("span", {}, "Preview at"), h("input", { type: "range", id: "vd-at", min: 0, max: 1000, step: 1, value: 500, "aria-label": "Preview date" }), h("span", { id: "vd-at-date", class: "pb-date" }))),
-      h("progress", { id: "vd-prog", max: 1, value: 0, hidden: true, style: "width:100%" })),
+        h("div", { class: "vd-at" }, sel("vd-what", [["frame", "Preview: chart"], ["intro", "Preview: intro card"], ["outro", "Preview: outro card"]], "frame"),
+          h("input", { type: "range", id: "vd-at", min: 0, max: 1000, step: 1, value: 500, "aria-label": "Preview date" }), h("span", { id: "vd-at-date", class: "pb-date" }))),
+      h("progress", { id: "vd-prog", max: 1, value: 0, hidden: true, style: "width:100%" })))),
     buttons: [
       { label: "Close", onClick: ({ close }) => { cancel = true; close(); } },
       { label: "Export video", primary: true, onClick: async ({ setMsg, dlg, close }) => {
@@ -442,23 +482,31 @@ export function videoDialog(app, { t0, t1, mode = "both", header = true, onDone 
         const a = Date.parse(val(dlg, "vd-from")), b = Date.parse(val(dlg, "vd-to")) + 864e5;
         if (!(b > a)) return setMsg("The end date must be after the start date.", "err");
         const [W, H] = val(dlg, "vd-size").split("x").map(Number), secs = Math.max(3, Math.min(300, +val(dlg, "vd-len") || 20));
+        const intro = introOf(dlg), outro = outroOf(dlg);
+        const mus = { volume: Math.max(0, Math.min(100, +val(dlg, "vm-vol") || 0)) / 100, fade_in: Math.max(0, +val(dlg, "vm-fi") || 0), fade_out: Math.max(0, +val(dlg, "vm-fo") || 0), start_at: Math.max(0, +val(dlg, "vm-at") || 0) };
+        // keep the choices with the project for next time
+        V.intro = { ...V.intro, on: !!intro, seconds: +val(dlg, "vi-sec") || 4, bg: val(dlg, "vi-bg"), title: val(dlg, "vi-title").trim(), subtitle: val(dlg, "vi-sub").trim(), details: chk(dlg, "vi-det") };
+        V.outro = { ...V.outro, on: !!outro, seconds: +val(dlg, "vo-sec") || 3, bg: val(dlg, "vo-bg"), line: val(dlg, "vo-line").trim(), details: chk(dlg, "vo-det") };
+        V.music = mus; app.changed(false);
         busy = true; cancel = false;
         const prog = $("#vd-prog", dlg); prog.hidden = false;
         setMsg("Making the video… keep this tab open.");
         try {
           const { exportVideo } = await import("./video.js");
-          const r = await exportVideo(app.p, { t0: a, t1: b, seconds: secs, W, H, mode: val(dlg, "vd-mode"), header: $("#vd-head", dlg).checked, weeks: +val(dlg, "vd-win"), intro: $("#vd-intro", dlg).checked, onProgress: f => { prog.value = f; setMsg(`Making the video… ${Math.round(f * 100)}%`); return !cancel; } });
+          const r = await exportVideo(app.p, { t0: a, t1: b, seconds: secs, W, H, mode: val(dlg, "vd-mode"), header: chk(dlg, "vd-head"), weeks: +val(dlg, "vd-win"),
+            intro, outro, music: music ? { buffer: music, ...mus } : null, onProgress: f => { prog.value = f; setMsg(`Making the video… ${Math.round(f * 100)}%`); return !cancel; } });
           if (!r) { setMsg("Cancelled."); return; }
           onDone(r);
           setMsg(`Saved a ${(r.blob.size / 1e6).toFixed(1)} MB ${r.ext.toUpperCase()} video.`, "ok");
           if (r.ext === "mp4") setTimeout(close, 1500);
         } finally { busy = false; }
       } }],
-    onClose: () => { cancel = true; clearTimeout(timer); if (url) URL.revokeObjectURL(url); },
+    onClose: () => { cancel = true; clearTimeout(timer); if (url) URL.revokeObjectURL(url); if (audioUrl) URL.revokeObjectURL(audioUrl); },
   });
   D0 = md.dlg;
-  D0.addEventListener("input", e => { if (e.target.closest(".vd-preview, .row2, label")) later(); });
-  D0.addEventListener("change", later);
+  D0.addEventListener("input", e => { if (e.target.type !== "file") later(); });
+  D0.addEventListener("change", e => { if (e.target.type !== "file") later(); });
+  D0.addEventListener("toggle", e => { const d = e.target; if (d.tagName === "DETAILS" && d.open) { const w = $("#vd-what", D0), k = d.querySelector("summary").textContent.toLowerCase(); if (k === "intro" || k === "outro") { w.value = k; later(); } } }, true);
   preview();
 }
 

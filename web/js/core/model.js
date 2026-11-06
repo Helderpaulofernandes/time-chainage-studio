@@ -73,9 +73,16 @@ export function newProject(name = "Untitled", discipline = "rail", chStart = 0, 
     styles: preset.styles.map(([c, n, k, col]) => makeStyle(c, n, k, col)),
     datasets: [{ id: ds, name: "Main", source: "manual" }],
     view: { main_dataset: ds, compare_dataset: null, show_footprints: true, show_labels: true, show_time_markers: true, show_location_grid: true,
-      pause_on_shutdowns: false, corridor: corridorDefaults() },
+      pause_on_shutdowns: false, corridor: corridorDefaults(), video: videoDefaults() },
     sections: [], locations: [], time_markers: [], activities: [], productivities: [], page: { ...defaultPage(), paper: unit === "ft" || unit === "mi" ? "Ledger" : "A3" }, p6: null, header_image: null, brand: null,
   };
+}
+
+// Video export settings: intro and outro cards, and music levels (the music file itself is chosen at export).
+export function videoDefaults() {
+  return { intro: { on: true, seconds: 4, bg: "white", title: "", subtitle: "", details: true },
+    outro: { on: true, seconds: 3, bg: "white", line: "", details: true },
+    music: { volume: 0.8, fade_in: 1, fade_out: 3, start_at: 0 } };
 }
 
 // Corridor view (crew playback) settings, kept with the project's other view settings.
@@ -94,6 +101,9 @@ export function normalise(p) {
   for (const [k, v] of Object.entries(base)) if (!(k in p)) p[k] = v;
   if (!p.locale) p.locale = { date_order: "dmy" };
   for (const k of ["meta", "chainage", "time", "view"]) for (const [kk, vv] of Object.entries(base[k])) if (!(kk in p[k])) p[k][kk] = vv;
+  const vd = videoDefaults();
+  if (!p.view.video || typeof p.view.video !== "object") p.view.video = vd;
+  for (const k of Object.keys(vd)) { p.view.video[k] = { ...vd[k], ...(p.view.video[k] || {}) }; }
   if (!p.view.corridor || typeof p.view.corridor !== "object") p.view.corridor = corridorDefaults();
   for (const [kk, vv] of Object.entries(corridorDefaults())) if (!(kk in p.view.corridor)) p.view.corridor[kk] = vv;
   if (!Array.isArray(p.view.corridor.stages)) p.view.corridor.stages = [];
