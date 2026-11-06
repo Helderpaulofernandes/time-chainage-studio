@@ -408,7 +408,7 @@ export function videoDialog(app, { t0, t1, mode = "both", header = true, onDone 
     if (!(b > a)) return;
     const [W, H] = val(dlg, "vd-size").split("x").map(Number), t = a + (b - a) * (+val(dlg, "vd-at") / 1000);
     const { frameSvg } = await import("./video.js");
-    const svg = frameSvg(app.p, t, W, H, { mode: val(dlg, "vd-mode"), header: $("#vd-head", dlg).checked, phase: 0.3 });
+    const svg = frameSvg(app.p, t, W, H, { mode: val(dlg, "vd-mode"), header: $("#vd-head", dlg).checked, weeks: +val(dlg, "vd-win"), phase: 0.3 });
     if (url) URL.revokeObjectURL(url);
     url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
     const img = $("#vd-prev", dlg); img.src = url; img.style.aspectRatio = `${W} / ${H}`;
@@ -425,7 +425,9 @@ export function videoDialog(app, { t0, t1, mode = "both", header = true, onDone 
         field("Size", sel("vd-size", [["1920x1080", "1920 × 1080 (Full HD)"], ["1280x720", "1280 × 720"], ["3840x2160", "3840 × 2160 (4K, slow)"]], "1920x1080"))),
       h("div", { class: "row2" },
         field("View", sel("vd-mode", [["both", "Both: corridor above the chart"], ["chart", "Chart only"], ["corridor", "Corridor only"]], mode)),
-        h("label", { class: "chk", style: "align-self:end" }, h("input", { type: "checkbox", id: "vd-head", checked: header }), " Chart header (sections and locations above the chart)")),
+        field("Chart shows", sel("vd-win", [["0", "The whole programme"], ["6", "6 weeks, following the date"], ["13", "13 weeks, following the date"], ["26", "26 weeks, following the date"], ["52", "52 weeks, following the date"]], mode === "both" ? "13" : "0"),
+          "Following the date keeps the chart readable when the corridor shares the frame.")),
+      h("label", { class: "chk" }, h("input", { type: "checkbox", id: "vd-head", checked: header }), " Chart header (sections and locations above the chart)"),
       h("div", { class: "vd-preview" },
         h("img", { id: "vd-prev", alt: "Preview of a video frame" }),
         h("div", { class: "vd-at" }, h("span", {}, "Preview at"), h("input", { type: "range", id: "vd-at", min: 0, max: 1000, step: 1, value: 500, "aria-label": "Preview date" }), h("span", { id: "vd-at-date", class: "pb-date" }))),
@@ -442,7 +444,7 @@ export function videoDialog(app, { t0, t1, mode = "both", header = true, onDone 
         setMsg("Making the video… keep this tab open.");
         try {
           const { exportVideo } = await import("./video.js");
-          const r = await exportVideo(app.p, { t0: a, t1: b, seconds: secs, W, H, mode: val(dlg, "vd-mode"), header: $("#vd-head", dlg).checked, onProgress: f => { prog.value = f; setMsg(`Making the video… ${Math.round(f * 100)}%`); return !cancel; } });
+          const r = await exportVideo(app.p, { t0: a, t1: b, seconds: secs, W, H, mode: val(dlg, "vd-mode"), header: $("#vd-head", dlg).checked, weeks: +val(dlg, "vd-win"), onProgress: f => { prog.value = f; setMsg(`Making the video… ${Math.round(f * 100)}%`); return !cancel; } });
           if (!r) { setMsg("Cancelled."); return; }
           onDone(r);
           setMsg(`Saved a ${(r.blob.size / 1e6).toFixed(1)} MB ${r.ext.toUpperCase()} video.`, "ok");

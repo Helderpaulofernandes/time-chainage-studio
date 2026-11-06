@@ -1,6 +1,6 @@
 // Playback export: draws each frame offline (title strip, chart at the play date, legend) and encodes it as MP4.
 // MP4 uses the browser's WebCodecs encoder and mp4-muxer (loaded only when needed); WebM via MediaRecorder is the fallback.
-import { renderChart, renderLegend, activeAt } from "./render.js";
+import { renderChart, renderLegend, activeAt, geometry } from "./render.js";
 import { renderCorridor } from "./corridor.js";
 import { niceDate, esc, DAY, DOW } from "./util.js";
 
@@ -15,20 +15,43 @@ function loadScript(src) {
   });
 }
 
-// The corridor view sized for a frame: in "both" it takes at most 65% of the height (lanes shrink rather than the chart),
+// The corridor view sized for a frame: in "both" it takes at most 45% of the height (lanes shrink rather than the chart),
 // on its own its lanes grow to fill the frame.
 function corridorFor(p, t, w, h, mode, phase, compact) {
   const base = { width: w, compact, playTime: t, hideDate: true, phase };
   let r = renderCorridor(p, base);
   const fixed = r.C.lanesTop + 8, n = Math.max(1, r.C.lanes.length);
-  const room = mode === "both" ? h * 0.65 : h;
+  const room = mode === "both" ? h * 0.45 : h;
   const lh = mode === "both" ? (r.height > room ? Math.max(10, (room - fixed) / n) : null) : Math.min(60, Math.max(10, (room - fixed) / n));
   if (lh) r = renderCorridor(p, { ...base, laneHeight: lh });
   return r;
 }
 
+// The chart for a frame. weeks = 0 fits the whole programme into the height; otherwise the chart shows that many
+// weeks at a readable scale and follows the date line (kept 40% down), with its header and chainage axis fixed on top.
+function chartFor(p, t, x, y, w, h, { compact, header, weeks }) {
+  const noHeader = !header;
+  if (!weeks) {
+    const { svg, G } = renderChart(p, { width: w, height: h, compact, playTime: t, noHeader });
+    return `<svg x="${x}" y="${y}" width="${w}" height="${h}" viewBox="0 0 ${G.W} ${G.H}" preserveAspectRatio="xMidYMin meet">${svg}</svg>`;
+  }
+  const g0 = geometry(p, { width: w, compact, noHeader }), s = w / g0.W;
+  const topH = g0.top * s, gridOut = h - topH - 4;
+  if (gridOut < 40) return chartFor(p, t, x, y, w, h, { compact, header, weeks: 0 });
+  const gridV = gridOut / s;
+  const { svg, G } = renderChart(p, { width: w, ppd: gridV / (weeks * 7), compact, playTime: t, noHeader });
+  if (G.GH <= gridV) return `<svg x="${x}" y="${y}" width="${w}" height="${(G.H * s).toFixed(1)}" viewBox="0 0 ${G.W} ${G.H}">${svg}</svg>`;
+  const y0 = Math.max(G.top, Math.min(G.top + G.GH - gridV, G.Y(t) - gridV * 0.4));
+  return `<svg x="${x}" y="${y}" width="${w}" height="${topH.toFixed(1)}" viewBox="0 0 ${G.W} ${G.top}">${svg}</svg>` +
+    `<svg x="${x}" y="${(y + topH).toFixed(1)}" width="${w}" height="${gridOut.toFixed(1)}" viewBox="0 ${y0.toFixed(1)} ${G.W} ${gridV.toFixed(1)}">${svg}</svg>` +
+    `<rect x="${x + G.L * s}" y="${(y + topH).toFixed(1)}" width="${((G.R - G.L) * s).toFixed(1)}" height="${gridOut.toFixed(1)}" fill="none" stroke="#5D6B70"/>`;
+}
+
+// Default chart window: follow the date over 13 weeks when the corridor shares the frame, else the whole programme.
+export const defaultWeeks = mode => (mode === "both" ? 13 : 0);
+
 // One frame as an SVG string of size W x H. mode: "chart" | "corridor" | "both".
-export function frameSvg(p, t, W, H, { mode = "chart", phase = 0, header = true } = {}) {
+export function frameSvg(p, t, W, H, { mode = "chart", phase = 0, header = true, weeks = defaultWeeks(mode) } = {}) {
   const head = Math.round(H * 0.085), legendW = Math.round(W * 0.17), pad = 12, compact = W < 1500;
   const ds = (p.datasets.find(d => d.id === p.view.main_dataset) || {}).name || "";
   const n = activeAt(p, t).length, d = new Date(t);
@@ -42,8 +65,7 @@ export function frameSvg(p, t, W, H, { mode = "chart", phase = 0, header = true 
   const gap = cor ? 8 : 0, chH = ah - corH - gap;
   let chartSvg = "";
   if (mode !== "corridor" && chH > 40) {
-    const { svg: chart, G } = renderChart(p, { width: aw, height: chH, compact, playTime: t, noHeader: !header });
-    chartSvg = `<svg x="${pad}" y="${head + pad + corH + gap}" width="${aw}" height="${chH}" viewBox="0 0 ${G.W} ${G.H}" preserveAspectRatio="xMidYMin meet">${chart}</svg>`;
+    chartSvg = chartFor(p, t, pad, head + pad + corH + gap, aw, chH, { compact, header, weeks });
   }
   const lg = renderLegend(p, { size: 11 });
   const lgScale = Math.min(1, (H - head - pad * 2) / Math.max(1, lg.height));
@@ -77,8 +99,8 @@ export async function exportFrame(p, t, W = 1920, H = 1080, opts = {}) {
 }
 
 // Encode the playback from t0 to t1 into a video of `seconds` length. onProgress(0..1); return false from it to cancel.
-export async function exportVideo(p, { t0, t1, seconds = 20, fps = 30, W = 1920, H = 1080, hold = 2, mode = "chart", header = true, onProgress = () => true }) {
-  const svgAt = i => frameSvg(p, tAt(i), W, H, { mode, header, phase: (i / fps) % 1 });
+export async function exportVideo(p, { t0, t1, seconds = 20, fps = 30, W = 1920, H = 1080, hold = 2, mode = "chart", header = true, weeks = defaultWeeks(mode), onProgress = () => true }) {
+  const svgAt = i => frameSvg(p, tAt(i), W, H, { mode, header, weeks, phase: (i / fps) % 1 });
   const frames = Math.max(2, Math.round(seconds * fps)), extra = Math.round(hold * fps);
   const cv = Object.assign(document.createElement("canvas"), { width: W, height: H });
   const ctx = cv.getContext("2d");
