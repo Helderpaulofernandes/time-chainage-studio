@@ -475,7 +475,7 @@ function styleProps(box, s) {
   const setF = (k2, v) => { app.commit(); s.footprint[k2] = v; app.changed(); };
   box.append(h("h3", {}, `Style ${s.code}`), h("p", { class: "hint" }, `Used by ${used} activit${used === 1 ? "y" : "ies"}. The code is what P6's "Activity Style" field and TurboChart's shape code hold.`),
     h("div", { class: "fgrid" }, F("Code", I(s.code, rename)), F("Legend name", I(s.name, edit(s, "name"))),
-      F("Drawn as", S([["line", "Line (linear progress)"], ["bar", "Wide bar along the line"], ["block", "Block (area / static)"], ["cut", "Cut (descending triangle ▽)"], ["fill", "Fill (ascending triangle △)"], ["milestone", "Milestone"]], s.kind, edit(s, "kind"))),
+      F("Drawn as", S([["line", "Line (linear progress)"], ["bar", "Wide bar along the line"], ["block", "Block (area / static)"], ["cut", "Cut (right-angle triangle ◣, falling)"], ["fill", "Fill (right-angle triangle ◢, rising)"], ["milestone", "Milestone"]], s.kind, edit(s, "kind"))),
       F("Colour", I(s.colour, edit(s, "colour"), { type: "color" })), F("Line width", I(s.width, edit(s, "width", num), { type: "number", step: "0.5", min: 0.5 })),
       F("Line type", S([["solid", "Solid"], ["dash", "Dashed"], ["dot", "Dotted"]], s.dash, edit(s, "dash"))), F("Fill opacity", I(s.fill_opacity, edit(s, "fill_opacity", num), { type: "number", step: "0.05", min: 0, max: 1 })),
       C(s.legend !== false, edit(s, "legend"), "Show in legend")),

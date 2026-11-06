@@ -218,7 +218,7 @@ export function renderChart(p, opts = {}) {
       if (sel) s += `<rect x="${xx - 4}" y="${ya - 4}" width="${w + 8}" height="${hh + 8}" fill="none" stroke="${PAPER.sel}" stroke-width="2.5"/>`;
       s += `<rect x="${xx}" y="${ya}" width="${w}" height="${hh}" fill="${col}" fill-opacity="${st.fill_opacity ?? 0.35}" stroke="${col}" stroke-width="${st.width || 1.2}" ${dashOf(st.dash)}/>`;
     } else if (kind === "cut" || kind === "fill") {
-      // earthworks: cut as a descending triangle (wide at the top, point at the bottom), fill as an ascending one
+      // earthworks: cut and fill as right-angle triangles (see triPath)
       const xa = Math.min(g.x0, g.x1), w = Math.max(6, Math.abs(g.x1 - g.x0)), ya = Math.min(g.y0, g.y1), hh = Math.max(4, Math.abs(g.y1 - g.y0));
       const xx = Math.abs(g.x1 - g.x0) < 6 ? (g.x0 + g.x1) / 2 - 3 : xa;
       if (sel) s += `<rect x="${xx - 4}" y="${ya - 4}" width="${w + 8}" height="${hh + 8}" fill="none" stroke="${PAPER.sel}" stroke-width="2.5"/>`;
@@ -283,10 +283,10 @@ export function renderChart(p, opts = {}) {
 
 // Kinds drawn as an area over their chainage and dates (static, no moving front)
 export const AREA = new Set(["block", "cut", "fill"]);
-// Cut: descending triangle (base along the top, point at the bottom). Fill: ascending (point at the top).
+// Right-angle triangles on a flat base. Cut ◣: the slope falls left to right. Fill ◢: the slope rises left to right.
 export function triPath(kind, x, y, w, h) {
-  const m = (x + w / 2).toFixed(1), X0 = x.toFixed(1), X1 = (x + w).toFixed(1), Y0 = y.toFixed(1), Y1 = (y + h).toFixed(1);
-  return kind === "cut" ? `M${X0} ${Y0}H${X1}L${m} ${Y1}Z` : `M${X0} ${Y1}H${X1}L${m} ${Y0}Z`;
+  const X0 = x.toFixed(1), X1 = (x + w).toFixed(1), Y0 = y.toFixed(1), Y1 = (y + h).toFixed(1);
+  return kind === "cut" ? `M${X0} ${Y0}V${Y1}H${X1}Z` : `M${X1} ${Y0}V${Y1}H${X0}Z`;
 }
 
 // The parts of a playback frame that move: cut-off of the done layer, work fronts, date line, date tag and crew markers.
