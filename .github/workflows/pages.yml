@@ -22,10 +22,10 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 24
       # a failing check stops the publish
       - name: Run the checks
         run: node --test tests/*.test.mjs
@@ -36,9 +36,9 @@ jobs:
           find web/js -name '*.js' -exec sed -i -E "s#((from|import\() *\"\.{1,2}/[^\"?]+\.js)\"#\1?v=$V\"#g" {} +
           sed -i -E "s#(src=\"js/app\.js)\"#\1?v=$V\"#; s#(href=\"css/app\.css)\"#\1?v=$V\"#" web/index.html
           grep -c "?v=$V" web/index.html
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: web
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
