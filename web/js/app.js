@@ -1,6 +1,7 @@
 // Time-Chainage Studio front end: menus, chart interaction, side panels, undo and autosave.
 import { api } from "./api.js";
-import { renderChart, renderLegend, geometry, styleMap, activeAt, playDynamic, resetProgress, MARKS, FILLS } from "./render.js";
+import { renderChart, renderLegend, geometry, styleMap, activeAt, playDynamic, resetProgress, MARKS, FILLS, AREA, triPath } from "./render.js";
+import { actGeo } from "./extras.js";
 import { renderCorridor, corridorDynamic, corridorCfg } from "./corridor.js";
 import { DAY, tms, tstr, dstr, niceDate, niceFinish, chFmt, chToM, mToCh, chLabel, chIsStation, lenUnit, lenFromM, setDateOrder, esc, $, $$, h, uid, clamp, download, debounce, DOW } from "./util.js";
 // chainage inputs: text boxes on station projects ("12+34.56"), number boxes otherwise
@@ -12,9 +13,18 @@ import { newProject } from "./core/model.js";
 import { defaultBrand, projectCopy } from "./brand.js";
 import { pageView, printPage, exportPng, renderPage } from "./page.js";
 
+// Undo snapshots: images (header image, logos, image blocks) are kept once and referred to by a token, so a 3 MB
+// aerial photo is not copied into every one of the 80 undo steps.
+const IMGS = new Map(), IMG_BY = new Map();
+const snapshot = p => JSON.stringify(p, (k, v) => {
+  if (typeof v !== "string" || v.length < 4096 || !v.startsWith("data:")) return v;
+  let id = IMG_BY.get(v); if (!id) { id = "@@img:" + (IMGS.size + 1); IMG_BY.set(v, id); IMGS.set(id, v); } return id;
+});
+const restore = s => JSON.parse(s, (k, v) => (typeof v === "string" && v.startsWith("@@img:") ? IMGS.get(v) ?? null : v));
 const app = {
   p: null, sel: null, mode: "select", view: "chart", xZoom: 1, undoS: [], redoS: [], presets: null, saveState: "",
-  commit() { this.pushUndo(JSON.stringify(this.p)); },
+  commit() { this.pushUndo(this.snap()); },
+  snap() { return snapshot(this.p); },
   pushUndo(s) { this.undoS.push(s); if (this.undoS.length > 80) this.undoS.shift(); this.redoS = []; },
   changed(rerender = true) { resetProgress(this.p); this.saveState = "Unsaved changes"; status(); save(); if (rerender) render(); },
   open(p, fresh = false) { if (play.on) playClose(true); setDateOrder((p.locale || {}).date_order); this.p = p;
@@ -49,8 +59,8 @@ const save = debounce(async () => {
   }
 }, 700);
 
-function undo() { if (!app.undoS.length) return; app.redoS.push(JSON.stringify(app.p)); app.p = JSON.parse(app.undoS.pop()); validSel(); app.changed(); toast("Undone"); }
-function redo() { if (!app.redoS.length) return; app.undoS.push(JSON.stringify(app.p)); app.p = JSON.parse(app.redoS.pop()); validSel(); app.changed(); toast("Redone"); }
+function undo() { if (!app.undoS.length) return; app.redoS.push(app.snap()); app.p = restore(app.undoS.pop()); validSel(); app.changed(); toast("Undone"); }
+function redo() { if (!app.redoS.length) return; app.undoS.push(app.snap()); app.p = restore(app.redoS.pop()); validSel(); app.changed(); toast("Redone"); }
 function validSel() { if (app.sel && !findSel()) app.sel = null; }
 function findSel() {
   const s = app.sel, p = app.p; if (!s || !p) return null;
@@ -137,6 +147,22 @@ function buildMenus() {
     btn.addEventListener("click", e => { e.stopPropagation(); const open = list.hidden; closeMenus(); if (open) { fill(); list.hidden = false; btn.setAttribute("aria-expanded", "true"); } });
     btn.addEventListener("mouseenter", () => { if ($$(".menu-list").some(l => !l.hidden) && list.hidden) { closeMenus(); fill(); list.hidden = false; btn.setAttribute("aria-expanded", "true"); } });
     bar.append(h("div", { class: "menu" }, btn, list));
+  });
+  // keyboard: ↓ / Enter opens a menu, ↑ ↓ Home End move, ← → switch menus, Esc closes
+  bar.addEventListener("keydown", e => {
+    const btns = $$(".menu-btn", bar), menu = e.target.closest(".menu"); if (!menu) return;
+    const btn = $(".menu-btn", menu), list = $(".menu-list", menu), items = $$("[role=menuitem]", list), i = items.indexOf(e.target), bi = btns.indexOf(btn);
+    const open = b => { b.click(); if (!$(".menu-list", b.parentNode).hidden) $("[role=menuitem]", b.parentNode)?.focus(); };
+    if (e.key === "Escape") { e.preventDefault(); closeMenus(); btn.focus(); }
+    else if (e.target === btn && (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ")) { e.preventDefault(); if (list.hidden) open(btn); else items[0]?.focus(); }
+    else if (i >= 0 && e.key === "ArrowDown") { e.preventDefault(); items[(i + 1) % items.length].focus(); }
+    else if (i >= 0 && e.key === "ArrowUp") { e.preventDefault(); items[(i - 1 + items.length) % items.length].focus(); }
+    else if (i >= 0 && e.key === "Home") { e.preventDefault(); items[0].focus(); }
+    else if (i >= 0 && e.key === "End") { e.preventDefault(); items.at(-1).focus(); }
+    else if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+      e.preventDefault(); const nb = btns[(bi + (e.key === "ArrowRight" ? 1 : -1) + btns.length) % btns.length];
+      if (list.hidden) nb.focus(); else { closeMenus(); open(nb); }
+    }
   });
 }
 function closeMenus() { $$(".menu-list").forEach(l => (l.hidden = true)); $$(".menu-btn").forEach(b => b.setAttribute("aria-expanded", "false")); }
@@ -251,7 +277,7 @@ svgEl.addEventListener("pointerdown", e => {
   if (app.mode === "draw") { if (!inGrid(q)) return; drag = { type: "draw", q0: q, q1: q }; svgEl.setPointerCapture(e.pointerId); return; }
   const hd = e.target.closest("[data-h]"), ac = e.target.closest("[data-act]"), mk = e.target.closest("[data-mk]"), lc = e.target.closest("[data-loc]");
   const nt = e.target.closest("[data-note]"), hl = e.target.closest("[data-haul]");
-  if (nt) { const n = (app.p.notes || []).find(x => x.id === nt.dataset.note); select("note", n.id); drag = { type: "note", n, q0: q, orig: { ...n }, snap: JSON.stringify(app.p), moved: false }; svgEl.setPointerCapture(e.pointerId); return; }
+  if (nt) { const n = (app.p.notes || []).find(x => x.id === nt.dataset.note); select("note", n.id); drag = { type: "note", n, q0: q, orig: { ...n }, snap: app.snap(), moved: false }; svgEl.setPointerCapture(e.pointerId); return; }
   if (hl) return select("haul", hl.dataset.haul);
   if (hd && app.sel?.kind === "act") return startDrag(e, "end", app.sel.id, q, +hd.dataset.h);
   if (ac) { select("act", ac.dataset.act); return startDrag(e, "move", ac.dataset.act, q); }
@@ -262,17 +288,21 @@ svgEl.addEventListener("pointerdown", e => {
 });
 function startDrag(e, type, id, q, end) {
   const a = app.p.activities.find(x => x.id === id); if (!a) return;
-  drag = { type, id, q0: q, end, orig: { ...a }, snap: JSON.stringify(app.p), moved: false };
+  drag = { type, id, q0: q, end, orig: { ...a }, snap: app.snap(), moved: false };
   svgEl.setPointerCapture(e.pointerId);
 }
 svgEl.addEventListener("pointermove", e => {
   if (!app.p || !G) return;
   const q = pt(e); readout(q);
-  if (!drag) return;
+  if (!drag) return hoverTip(e);
+  hoverTip(null);
   if (drag.type === "draw") { drag.q1 = q; const rb = $("#rb"); Object.entries({ x1: drag.q0.x, y1: drag.q0.y, x2: q.x, y2: q.y }).forEach(([k, v]) => rb.setAttribute(k, v)); rb.removeAttribute("display"); return; }
   if (drag.type === "note") {
     if (Math.abs(q.x - drag.q0.x) + Math.abs(q.y - drag.q0.y) > 3) drag.moved = true; if (!drag.moved) return;
-    const n = drag.n, o = drag.orig; n.ch_m = o.ch_m + snapM(G.Xi(q.x) - G.Xi(drag.q0.x)); n.at = tstr(tms(o.at) + snapT(G.Yi(q.y) - G.Yi(drag.q0.y))); drawChart(); return;
+    const n = drag.n, o = drag.orig; n.ch_m = o.ch_m + snapM(G.Xi(q.x) - G.Xi(drag.q0.x)); n.at = tstr(tms(o.at) + snapT(G.Yi(q.y) - G.Yi(drag.q0.y)));
+    // only the note moves while dragging; the chart is redrawn once on release
+    const el = svgEl.querySelector(`[data-note="${n.id}"]`); if (!el) return drawChart();
+    el.setAttribute("transform", `translate(${(G.X(n.ch_m) - G.X(o.ch_m)).toFixed(1)},${(G.Y(tms(n.at)) - G.Y(tms(o.at))).toFixed(1)})`); return;
   }
   const a = app.p.activities.find(x => x.id === drag.id), o = drag.orig; if (!a) return;
   if (Math.abs(q.x - drag.q0.x) + Math.abs(q.y - drag.q0.y) > 3) drag.moved = true;
@@ -281,8 +311,42 @@ svgEl.addEventListener("pointermove", e => {
   if (drag.type === "move") { a.ch0_m = o.ch0_m + dM; a.ch1_m = o.ch1_m + dM; a.start = tstr(tms(o.start) + dT); a.finish = tstr(tms(o.finish) + dT); }
   else if (drag.end === 0) { a.ch0_m = o.ch0_m + dM; a.start = tstr(Math.min(tms(o.start) + dT, tms(a.finish))); }
   else { a.ch1_m = o.ch1_m + dM; a.finish = tstr(Math.max(tms(o.finish) + dT, tms(a.start))); }
-  drawChart();
+  dragPreview(a);
 });
+// Hover tooltip for activities (the on-screen chart carries no per-activity <title>, to keep it light)
+let tipEl = null, tipId = null;
+function hoverTip(e) {
+  const ac = e && !play.on && e.target.closest && e.target.closest("[data-act]");
+  if (!ac) { if (tipEl) tipEl.hidden = true; tipId = null; return; }
+  if (!tipEl) { tipEl = h("div", { class: "tip", role: "tooltip" }); document.body.append(tipEl); }
+  if (tipId !== ac.dataset.act) {
+    const a = app.p.activities.find(x => x.id === ac.dataset.act); if (!a) return;
+    tipId = a.id; const st = styleMap(app.p)[a.style];
+    tipEl.textContent = ""; tipEl.append(h("b", {}, `${a.code} ${a.name}`), h("br"),
+      `${chFmt(app.p, a.ch0_m)} – ${chFmt(app.p, a.ch1_m)} · ${niceDate(tms(a.start))} – ${niceFinish(tms(a.finish))}${st ? " · " + st.name : ""}`);
+  }
+  tipEl.hidden = false; tipEl.style.left = Math.min(innerWidth - 280, e.clientX + 14) + "px"; tipEl.style.top = (e.clientY + 16) + "px";
+}
+svgEl.addEventListener("pointerleave", () => hoverTip(null));
+
+// While dragging, the activity is drawn as a light preview over a dimmed original, instead of redrawing the whole
+// chart on every mouse move (slow on big programmes). The full redraw happens once on release.
+function dragPreview(a) {
+  const ov = svgEl.querySelector("#ov"); if (!ov) return drawChart();
+  if (!drag.dimmed) { svgEl.querySelectorAll(`[data-act="${a.id}"]`).forEach(el => (el.style.opacity = ".2")); drag.dimmed = true; }
+  let pv = ov.querySelector("#dragpv"); if (!pv) { pv = document.createElementNS("http://www.w3.org/2000/svg", "g"); pv.id = "dragpv"; ov.append(pv); }
+  const st = styleMap(app.p)[a.style] || {}, col = st.colour || "#5D6B70", g = actGeo(app.p, G, a), k = st.kind || "line", f = v => v.toFixed(1);
+  const ya = Math.min(g.y0, g.y1), hh = Math.max(2, Math.abs(g.y1 - g.y0)), xa = Math.min(g.x0, g.x1), w = Math.max(4, Math.abs(g.x1 - g.x0));
+  const paint = `fill="${col}" fill-opacity=".3" stroke="${col}" stroke-width="2" stroke-dasharray="5 3"`;
+  pv.innerHTML = k === "milestone" ? `<path d="M${f(g.x0)} ${f(g.y0 - 7)}l7 7l-7 7l-7 -7z" ${paint}/>`
+    : k === "taper" ? `<polygon points="${f(g.x0)},${f(g.y0)} ${f(g.x1)},${f(g.y0)} ${f(G.X(a.fin_ch1_m ?? a.ch1_m) + g.dx)},${f(g.y1)} ${f(G.X(a.fin_ch0_m ?? a.ch0_m) + g.dx)},${f(g.y1)}" ${paint}/>`
+    : k === "cut" || k === "fill" ? `<path d="${triPath(k, xa, ya, w, hh)}" ${paint}/>`
+    : AREA.has(k) ? `<rect x="${f(xa)}" y="${f(ya)}" width="${f(w)}" height="${f(hh)}" ${paint}/>`
+    : `<line x1="${f(g.x0)}" y1="${f(g.y0)}" x2="${f(g.x1)}" y2="${f(g.y1)}" stroke="${col}" stroke-width="${Math.max(3, st.width || 3)}" stroke-linecap="round" stroke-opacity=".8"/>`;
+  const hs = svgEl.querySelectorAll("[data-h]");
+  if (hs.length === 2) { hs[0].setAttribute("cx", g.x0); hs[0].setAttribute("cy", g.y0); hs[1].setAttribute("cx", g.x1); hs[1].setAttribute("cy", g.y1); }
+  $("#st-cursor").textContent = `${a.code} · ${chFmt(app.p, a.ch0_m)} – ${chFmt(app.p, a.ch1_m)} · ${niceDate(tms(a.start))} – ${niceFinish(tms(a.finish))}`;
+}
 svgEl.addEventListener("pointerup", () => {
   if (!drag) return; const d = drag; drag = null;
   if (d.type === "draw") {

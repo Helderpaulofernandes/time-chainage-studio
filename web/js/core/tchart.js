@@ -12,10 +12,12 @@ function col(hex, a = 255) {
 const hex = c => (c ? "#" + [c.R, c.G, c.B].map(v => (v || 0).toString(16).padStart(2, "0")).join("").toUpperCase() : "#000000");
 
 // ---- time zones: TurboChart stores the real instant of local midnight
+// One formatter per time zone (building one per date made large exports take seconds)
+const FMT = new Map();
+const fmtFor = tz => FMT.get(tz) || FMT.set(tz, new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })).get(tz);
 function offsetMin(tz, utcMs) {
   try {
-    const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })
-      .formatToParts(new Date(utcMs)).map(x => [x.type, x.value]));
+    const parts = Object.fromEntries(fmtFor(tz).formatToParts(new Date(utcMs)).map(x => [x.type, x.value]));
     return (Date.UTC(+parts.year, +parts.month - 1, +parts.day, +parts.hour % 24, +parts.minute) - Math.floor(utcMs / 60000) * 60000) / 60000;
   } catch (e) { return 600; }
 }

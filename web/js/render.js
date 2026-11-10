@@ -164,6 +164,7 @@ export function renderChart(p, opts = {}) {
   let o = `<defs>
     <clipPath id="${G.idp}grid"><rect x="${L}" y="${top}" width="${R - L}" height="${GH}"/></clipPath>
     <pattern id="hatchA" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" stroke="${PAPER.hatch}" stroke-width="1.3"/></pattern>
+    <style>.tcl{font-family:${FONT};font-weight:500;paint-order:stroke;stroke:${PAPER.sheet};stroke-width:3px;stroke-linejoin:round}.tch{stroke:transparent;fill:none}</style>
   </defs>`;
   o += `<rect width="${W}" height="${H}" fill="${PAPER.sheet}"/>`;
 
@@ -308,7 +309,11 @@ export function renderChart(p, opts = {}) {
 
   // ---- activities
   const main = view.main_dataset, cmp = view.compare_dataset;
-  const visible = a => (a.dataset === main || (cmp && a.dataset === cmp)) && onChart(p, a);
+  // only what falls inside this chart's stretch and dates is drawn (close-up views and page blocks stay fast)
+  const cLo = Math.min(c.start_m, c.end_m), cHi = Math.max(c.start_m, c.end_m), pad = (cHi - cLo) * 0.02;
+  const inWindow = a => { const lo = Math.min(a.ch0_m, a.ch1_m, a.fin_ch0_m ?? a.ch0_m, a.fin_ch1_m ?? a.ch1_m), hi = Math.max(a.ch0_m, a.ch1_m, a.fin_ch0_m ?? a.ch0_m, a.fin_ch1_m ?? a.ch1_m);
+    return hi >= cLo - pad && lo <= cHi + pad && tms(a.finish) >= t0 - 30 * DAY && tms(a.start) <= t1 + 30 * DAY; };
+  const visible = a => (a.dataset === main || (cmp && a.dataset === cmp)) && onChart(p, a) && inWindow(a);
   const acts = p.activities.filter(visible);
   const ghostActs = acts.filter(a => a.dataset !== main), mainActs = acts.filter(a => a.dataset === main);
   const kindOrder = { block: 0, cut: 0, fill: 0, taper: 0, bar: 1, line: 2, milestone: 3 };
@@ -329,7 +334,7 @@ export function renderChart(p, opts = {}) {
     const st = S[a.style] || { kind: "line", colour: PAPER.muted, width: 2, label: { show: true, text: "{name}" } };
     const col = ghost ? PAPER.ghost : st.colour, g = geo(a), sel = !ghost && opts.selection?.kind === "act" && opts.selection.id === a.id;
     const kind = st.kind || "line";
-    let s = `<g ${ghost ? "" : `data-act="${a.id}" class="act"`} ${ghost ? 'opacity=".55"' : ""}><title>${esc(a.code)} ${esc(a.name)} · ${chFmt(p, a.ch0_m)}–${chFmt(p, a.ch1_m)} · ${niceDate(tms(a.start))} – ${niceFinish(tms(a.finish))}</title>`;
+    let s = `<g ${ghost ? "" : `data-act="${a.id}" class="act"`} ${ghost ? 'opacity=".55"' : ""}>${opts.interactive ? "" : `<title>${esc(a.code)} ${esc(a.name)} · ${chFmt(p, a.ch0_m)}–${chFmt(p, a.ch1_m)} · ${niceDate(tms(a.start))} – ${niceFinish(tms(a.finish))}</title>`}`;
     if (kind === "block") {
       const xa = Math.min(g.x0, g.x1), w = Math.max(4, Math.abs(g.x1 - g.x0)), ya = Math.min(g.y0, g.y1), hh = Math.max(2, Math.abs(g.y1 - g.y0));
       const xx = Math.abs(g.x1 - g.x0) < 4 ? (g.x0 + g.x1) / 2 - 2 : xa;
@@ -354,7 +359,7 @@ export function renderChart(p, opts = {}) {
     } else {
       const wdt = kind === "bar" ? Math.max(8, (st.width || 3) * 3) : st.width || 3;
       if (sel) s += `<line x1="${g.x0}" y1="${g.y0}" x2="${g.x1}" y2="${g.y1}" stroke="${PAPER.sel}" stroke-width="${wdt + 7}" stroke-linecap="round" stroke-opacity=".6"/>`;
-      if (!ghost) s += `<line x1="${g.x0}" y1="${g.y0}" x2="${g.x1}" y2="${g.y1}" stroke="transparent" stroke-width="${Math.max(14, wdt + 8)}"/>`;
+      if (!ghost && opts.interactive) s += `<line x1="${g.x0}" y1="${g.y0}" x2="${g.x1}" y2="${g.y1}" class="tch" stroke-width="${Math.max(14, wdt + 8)}"/>`;
       s += `<line x1="${g.x0}" y1="${g.y0}" x2="${g.x1}" y2="${g.y1}" stroke="${col}" stroke-width="${wdt}" stroke-linecap="${kind === "bar" ? "butt" : "round"}" ${kind === "bar" ? 'stroke-opacity=".55"' : ""} ${dashOf(st.dash)}/>`;
       s += marksSvg(st.marks, g.x0, g.y0, g.x1, g.y1, col, st.width || 3, st.mark_spacing || 22);
     }
@@ -367,7 +372,7 @@ export function renderChart(p, opts = {}) {
   if (pdefs.size) o += `<defs>${[...pdefs.values()].join("")}</defs>`;
   // logic links from P6 (View → Logic links): predecessor end to successor end, by relationship type
   if (view.show_links) {
-    const byCode = new Map(mainActs.map(a => [a.code, a]));
+    const byCode = new Map(p.activities.filter(a => a.dataset === main && onChart(p, a)).map(a => [a.code, a])); // links may lead off the window
     const end = (a, fin) => { const g = geo(a), k = (S[a.style] || {}).kind || "line"; return AREA.has(k) ? [(g.x0 + g.x1) / 2, fin ? g.y1 : g.y0] : fin ? [g.x1, g.y1] : [g.x0, g.y0]; };
     let lk = "";
     const flt = view.link_filter || "all", elbow = view.link_route === "elbow", crit = x => !!(x.p6?.driving || x.ms?.critical);
@@ -394,20 +399,19 @@ export function renderChart(p, opts = {}) {
       const inside = w > text.length * size * 0.55 + 8 && hh > size + 4;
       if (!inside && hh > text.length * size * 0.55 + 8 && hh > w * 1.5) { // tall and narrow: the label stands upright, inside if it fits
         const tx = w >= size + 4 ? xa + w / 2 + size / 3 : xa + w + size + 2;
-        o += `<text transform="translate(${tx.toFixed(1)},${(ya + hh / 2).toFixed(1)}) rotate(-90)" text-anchor="middle" font-size="${size}" font-weight="500" font-family="${FONT}" ${halo} fill="${tcol}" data-act="${a.id}">${esc(text)}</text>`;
+        o += `<text class="tcl" transform="translate(${tx.toFixed(1)},${(ya + hh / 2).toFixed(1)}) rotate(-90)" text-anchor="middle" font-size="${size}" fill="${tcol}" data-act="${a.id}">${esc(text)}</text>`;
         return;
       }
-      o += T(inside ? xa + w / 2 : Math.max(xa, Math.max(g.x0, g.x1)) + 6, ya + hh / 2 + size / 3, text,
-        `font-size="${size}" font-weight="500" font-family="${FONT}" ${inside ? 'text-anchor="middle"' : ""} ${halo} data-act="${a.id}"`, `fill:${tcol}`);
+      o += `<text class="tcl" x="${(inside ? xa + w / 2 : Math.max(xa, Math.max(g.x0, g.x1)) + 6).toFixed(1)}" y="${(ya + hh / 2 + size / 3).toFixed(1)}" font-size="${size}" ${inside ? 'text-anchor="middle"' : ""} fill="${tcol}" data-act="${a.id}">${esc(text)}</text>`;
       return;
     }
-    if (kind === "milestone") { o += T(g.x0 + 10, g.y0 + size / 3, text, `font-size="${size}" font-weight="500" font-family="${FONT}" ${halo}`, `fill:${tcol}`); return; }
+    if (kind === "milestone") { o += `<text class="tcl" x="${(g.x0 + 10).toFixed(1)}" y="${(g.y0 + size / 3).toFixed(1)}" font-size="${size}" fill="${tcol}">${esc(text)}</text>`; return; }
     const t = lab.position === "start" ? 0.1 : lab.position === "end" ? 0.9 : 0.5;
     const mx = g.x0 + (g.x1 - g.x0) * t, my = g.y0 + (g.y1 - g.y0) * t;
     let ang = 0;
     if (lab.follow_slope !== false) { ang = (Math.atan2(g.y1 - g.y0, g.x1 - g.x0) * 180) / Math.PI; if (ang > 90) ang -= 180; if (ang <= -90) ang += 180; }
     const anchor = lab.position === "start" ? "start" : lab.position === "end" ? "end" : "middle";
-    o += `<text transform="translate(${mx.toFixed(1)},${my.toFixed(1)}) rotate(${ang.toFixed(2)})" y="${side}" text-anchor="${anchor}" font-size="${size}" font-weight="500" font-family="${FONT}" ${halo} fill="${tcol}" data-act="${a.id}">${esc(text)}</text>`;
+    o += `<text class="tcl" transform="translate(${mx.toFixed(1)},${my.toFixed(1)}) rotate(${ang.toFixed(1)})" y="${side}" text-anchor="${anchor}" font-size="${size}" fill="${tcol}" data-act="${a.id}">${esc(text)}</text>`;
   });
   const PT = opts.playTime;
   if (PT != null) {

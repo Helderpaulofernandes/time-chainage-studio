@@ -1,5 +1,9 @@
 """Time-Chainage Studio API.
 
+Serves the browser app in web/. The REST import/export endpoints here are from the app's first phase and do not
+include later features (logic links, saved views, fill colours, MS Project, bands, resources): the browser app's
+JavaScript in web/js/core is the reference. Kept as the starting point for a live P6 connection and shared back end.
+
 Run:  python -m uvicorn server.main:app --port 8765   (from the time-chainage-studio folder)
 Docs: http://localhost:8765/docs
 """

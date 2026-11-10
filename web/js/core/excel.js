@@ -1,10 +1,9 @@
 // Excel time-chainage workbook import in the browser (SheetJS for cells, JSZip for the drawn shapes).
 // Sheets are recognised by header rows: activity registers (one data set each), assets, productivities, assumptions,
 // and the drawn chart sheet (section row, full-width bands and milestone lines drawn as shapes).
-import { makeActivity, makeStyle, newId, newProject, fmtT, DAY } from "./model.js";
+import { makeActivity, makeStyle, newId, newProject, fmtT, DAY, STYLE_PALETTE } from "./model.js";
 
-const PALETTE = ["#002060", "#00B0F0", "#FFC000", "#92D050", "#C00000", "#C65911", "#7030A0", "#548235", "#FF66CC",
-  "#996633", "#404040", "#1F8A86", "#8B0000", "#7F7F7F", "#E2C46B", "#4F81BD", "#A33F7A", "#2F8A55"];
+const PALETTE = STYLE_PALETTE;
 const norm = v => String(v ?? "").replace(/\s+/g, " ").trim().toLowerCase();
 const MONTHS = { JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5, JUL: 6, AUG: 7, SEP: 8, OCT: 9, NOV: 10, DEC: 11 };
 const DATE_RE = /(\d{1,2})\s+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[A-Z]*\s+(\d{4})/i;

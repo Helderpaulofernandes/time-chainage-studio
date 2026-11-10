@@ -30,6 +30,9 @@ export const PRESETS = {
       ["TBMLAUNCH", "TBM assembly / launch", "block", "#B13A3A"]] },
 };
 PRESETS.other = { label: "Other linear asset", location_types: PRESETS.road.location_types, styles: PRESETS.road.styles };
+// Colours given to new activity styles (imports), in order
+export const STYLE_PALETTE = ["#002060", "#00B0F0", "#FFC000", "#92D050", "#C00000", "#C65911", "#7030A0", "#548235", "#FF66CC",
+  "#996633", "#404040", "#1F8A86", "#8B0000", "#7F7F7F", "#E2C46B", "#4F81BD", "#A33F7A", "#2F8A55"];
 // Chainage units: everything is stored in metres; these say how to show it.
 export const UNIT_FACTOR = { m: 1, km: 1000, ft: 0.3048, mi: 1609.344 };
 export const unitFactor = u => UNIT_FACTOR[u] || 1;
@@ -114,6 +117,59 @@ export function normalise(p) {
   });
   if (!p.datasets.length) p.datasets = base.datasets;
   if (!p.datasets.some(d => d.id === p.view.main_dataset)) p.view.main_dataset = p.datasets[0].id;
+  return sanitise(p);
+}
+
+// ------------------------------------------------------------------ sanitising
+// A project file can come from anyone. Everything that goes into the chart drawing as an attribute (colours, ids,
+// numbers, images) is checked here, so a crafted file cannot inject markup or script. Text is escaped where drawn.
+const HEX6 = /^#[0-9a-f]{6}$/i, HEX3 = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i;
+const IMG = /^data:image\/(png|jpe?g|gif|webp|svg\+xml);base64,[A-Za-z0-9+/=\s]*$/;
+export const safeColour = (v, fb = null) => { if (typeof v !== "string") return fb; if (HEX6.test(v)) return v; const m = HEX3.exec(v); return m ? `#${m[1]}${m[1]}${m[2]}${m[2]}${m[3]}${m[3]}` : fb; };
+export const safeImage = v => (typeof v === "string" && IMG.test(v) ? v : null);
+export const safeId = v => (v == null || v === "" ? v : String(v).replace(/[^\w.:-]/g, "_"));
+const num = (v, fb) => (v === "" || v == null || !Number.isFinite(+v) ? fb : +v);
+const oneOf = (v, list, fb) => (list.includes(v) ? v : fb);
+export function sanitise(p) {
+  const arr = k => (Array.isArray(p[k]) ? p[k] : (p[k] = []));
+  const c = p.chainage, t = p.time;
+  for (const k of ["start_m", "end_m", "major_m", "minor_m", "snap_m", "repeat_days", "decimals"]) c[k] = num(c[k], k === "end_m" ? 1000 : 0);
+  c.breaks = (c.breaks || []).map(b => ({ from_m: num(b.from_m, 0), to_m: num(b.to_m, 0) }));
+  c.equations = (c.equations || []).map(e => ({ at_m: num(e.at_m, 0), value_m: num(e.value_m, 0) }));
+  t.px_per_day = num(t.px_per_day, 2); t.work_days_per_week = num(t.work_days_per_week, 7);
+  for (const s of arr("styles")) {
+    s.colour = safeColour(s.colour, "#1F6E8C"); s.fill_colour = safeColour(s.fill_colour, null);
+    s.kind = oneOf(s.kind, ["line", "bar", "block", "cut", "fill", "taper", "milestone"], "line");
+    s.dash = oneOf(s.dash, ["solid", "dash", "dot"], "solid"); s.fill_pattern = oneOf(s.fill_pattern, ["solid", "hatch", "crosshatch", "dots", "none"], "solid");
+    s.marks = oneOf(s.marks, ["none", "tick", "arrow", "chevron", "cross", "dot", "flag"], "none");
+    s.width = num(s.width, 2); s.fill_opacity = num(s.fill_opacity, 0.35); s.mark_spacing = num(s.mark_spacing, 22);
+    if (s.label) { s.label.size = num(s.label.size, 11); s.label.colour = safeColour(s.label.colour, null); }
+    if (s.footprint) for (const k of ["length_m", "lag_days", "opacity"]) s.footprint[k] = num(s.footprint[k], k === "opacity" ? 0.18 : 0);
+  }
+  for (const lt of arr("location_types")) { lt.id = safeId(lt.id); lt.colour = safeColour(lt.colour, "#5D6B70"); lt.row = num(lt.row, 1); }
+  for (const l of arr("locations")) { l.id = safeId(l.id); l.type = safeId(l.type); l.colour = safeColour(l.colour, null); l.ch_m = num(l.ch_m, 0); l.to_m = num(l.to_m, null); l.row = num(l.row, null); l.pin_y = num(l.pin_y, null); }
+  for (const s of arr("sections")) { s.id = safeId(s.id); s.from_m = num(s.from_m, 0); s.to_m = num(s.to_m, 0); }
+  for (const m of arr("time_markers")) { m.id = safeId(m.id); m.colour = safeColour(m.colour, null); m.ch0_m = num(m.ch0_m, null); m.ch1_m = num(m.ch1_m, null); }
+  for (const d of arr("datasets")) d.id = safeId(d.id);
+  p.view.main_dataset = safeId(p.view.main_dataset); p.view.compare_dataset = safeId(p.view.compare_dataset) || null;
+  for (const a of arr("activities")) {
+    a.id = safeId(a.id); a.dataset = safeId(a.dataset); a.col = safeId(a.col) || null;
+    a.ch0_m = num(a.ch0_m, 0); a.ch1_m = num(a.ch1_m, a.ch0_m); a.fin_ch0_m = num(a.fin_ch0_m, null); a.fin_ch1_m = num(a.fin_ch1_m, null);
+    if (a.label) { if ("size" in a.label) a.label.size = num(a.label.size, null); if ("colour" in a.label) a.label.colour = safeColour(a.label.colour, null); }
+    if (a.links) a.links = a.links.map(l => ({ code: String(l.code ?? ""), type: oneOf(String(l.type || "FS").toUpperCase(), ["FS", "SS", "FF", "SF"], "FS"), lag_days: num(l.lag_days, 0) }));
+  }
+  for (const n of arr("notes")) { n.id = safeId(n.id); n.colour = safeColour(n.colour, "#18262B"); n.size = num(n.size, null); n.angle = num(n.angle, 0); n.ch_m = num(n.ch_m, 0); n.leader_ch_m = num(n.leader_ch_m, null); }
+  for (const h of arr("hauls")) { h.id = safeId(h.id); h.colour = safeColour(h.colour, "#7F6000"); for (const k of ["from0_m", "from1_m", "to0_m", "to1_m"]) h[k] = num(h[k], null); h.from0_m ??= 0; h.to0_m ??= 0; }
+  for (const pl of arr("progress_lines")) { pl.id = safeId(pl.id); pl.colour = safeColour(pl.colour, "#C00000"); pl.width = num(pl.width, null); pl.points = (pl.points || []).map(([d, m]) => [String(d), num(m, null)]); }
+  for (const b of arr("bands")) { b.id = safeId(b.id); b.height = num(b.height, null); b.cut_colour = safeColour(b.cut_colour, null); b.fill_colour = safeColour(b.fill_colour, null); b.colours = (b.colours || []).map(x => safeColour(x, "#7F7F7F")); b.types = b.types ? b.types.map(safeId) : b.types; }
+  for (const s of arr("side_cols")) { s.id = safeId(s.id); s.width = num(s.width, 90); s.side = oneOf(s.side, ["left", "right"], "left"); }
+  for (const tr of arr("tracks")) tr.offset_px = num(tr.offset_px, 0);
+  for (const v of arr("views")) { v.id = safeId(v.id); v.ch_from = num(v.ch_from, null); v.ch_to = num(v.ch_to, null); }
+  if (p.resources) { for (const s of p.resources.series || []) { s.id = safeId(s.id); s.colour = safeColour(s.colour, "#7F7F7F"); } if (p.resources.panel) p.resources.panel.width = num(p.resources.panel.width, 150); }
+  if (p.header_image) { p.header_image.data = safeImage(p.header_image.data); for (const k of ["height_px", "opacity", "nat_w", "nat_h", "ch_start_m", "ch_end_m"]) p.header_image[k] = num(p.header_image[k], k === "opacity" ? 1 : null); if (!p.header_image.data) p.header_image = null; }
+  if (p.brand) { p.brand.logo = safeImage(p.brand.logo); p.brand.colour = safeColour(p.brand.colour, "#18262B"); p.brand.accent = safeColour(p.brand.accent, "#C00000"); p.brand.logo_w = num(p.brand.logo_w, 0); p.brand.logo_h = num(p.brand.logo_h, 0); }
+  for (const b of (p.page && p.page.blocks) || []) { b.id = safeId(b.id); if (b.data) b.data = safeImage(b.data); for (const k of ["x", "y", "w", "h"]) b[k] = num(b[k], 0.1); b.font_size = num(b.font_size, null); b.ch_from = num(b.ch_from, null); b.ch_to = num(b.ch_to, null); }
+  for (const sg of (p.view.corridor && p.view.corridor.stages) || []) sg.colour = safeColour(sg.colour, null) || undefined;
   return p;
 }
 

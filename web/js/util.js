@@ -68,15 +68,25 @@ export function lenFmt(p, m) { const c = p.chainage, u = c.unit === "mi" ? "mi" 
 export const lenUnit = p => UNITS[p.chainage.unit]?.len || "m";
 export const lenFromM = (p, m) => (lenUnit(p) === "ft" ? m / 0.3048 : m);
 // Parse what a user typed: a number in the project unit, or a station ("12+34.56" ft, "12+345" metric)
-export function chToM(p, v) {
+export function chToM(p, v, raw = false) {
+  const m = chToMRaw(p, v); return raw ? m : runningM(p, m);
+}
+function chToMRaw(p, v) {
   const c = p.chainage, s = String(v ?? "").trim().replace(/,/g, "").replace(/^(ch|sta|mp|km)\s*/i, "");
   if (s === "") return null;
   const st = s.match(/^(-?)(\d+)\+(\d+(?:\.\d+)?)$/);
   if (st) { const sign = st[1] ? -1 : 1, base = c.unit === "ft" || c.unit === "mi" ? 100 : 1000, n = +st[2] * base + +st[3]; return sign * (base === 100 ? n * 0.3048 : n); }
   const n = parseFloat(s); return isNaN(n) ? null : n * unitFactor(c.unit);
 }
-// Value for an input box: a station string on station projects, otherwise a plain number in the project unit
-export function mToCh(p, m) { if (m == null) return ""; return isStation(p.chainage) ? stationText(p.chainage, m) : +(m / unitFactor(p.chainage.unit)).toFixed(6); }
+// Value for an input box: a station string on station projects, otherwise a plain number in the project unit.
+// Both directions follow chainage equations, so what you type is what the chart shows (raw = running distance).
+export function mToCh(p, m, raw = false) { if (m == null) return ""; if (!raw) m = shownM(p, m); return isStation(p.chainage) ? stationText(p.chainage, m) : +(m / unitFactor(p.chainage.unit)).toFixed(6); }
+// Running distance for a shown chainage: the stretch after the last equation whose shown values contain it
+export function runningM(p, v) {
+  const eq = (p.chainage.equations || []).slice().sort((a, b) => a.at_m - b.at_m); if (!eq.length || v == null) return v;
+  for (let i = eq.length - 1; i >= 0; i--) { const e = eq[i], m = e.at_m + (v - e.value_m), next = eq[i + 1]; if (m >= e.at_m - 1e-6 && (!next || m < next.at_m)) return m; }
+  return v; // before the first equation, shown and running are the same
+}
 export const chIsStation = p => isStation(p.chainage);
 export const chName = p => (isStation(p.chainage) ? "station" : `chainage (${p.chainage.unit})`);
 
@@ -95,6 +105,8 @@ export function h(tag, attrs = {}, ...kids) {
   for (const c of kids.flat()) if (c != null && c !== false) e.append(c.nodeType ? c : String(c));
   return e;
 }
+// A labelled form field: label, the input, and an optional hint under it
+export const field = (label, input, hint) => h("label", { class: "fld" }, h("span", {}, label), input, hint ? h("small", {}, hint) : null);
 export function download(name, data, type = "application/octet-stream") {
   const url = URL.createObjectURL(data instanceof Blob ? data : new Blob([data], { type }));
   const a = h("a", { href: url, download: name }); document.body.append(a); a.click(); a.remove();

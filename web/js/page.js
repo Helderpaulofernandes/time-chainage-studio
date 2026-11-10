@@ -233,8 +233,8 @@ export function pageView(app) {
     const rs = e.target.closest("[data-resize]"), bl = e.target.closest("[data-block]");
     if (!rs && !bl) { if (e.target.closest("#page-canvas")) { sel = null; draw(); } return; }
     const id = (rs || bl).dataset.resize || (rs || bl).dataset.block, b = app.p.page.blocks.find(x => x.id === id);
-    sel = id; drag = { b, mode: rs ? "size" : "move", p0: pt(e), orig: { ...b }, snap: JSON.stringify(app.p) };
-    e.target.setPointerCapture?.(e.pointerId); draw();
+    sel = id; drag = { b, mode: rs ? "size" : "move", p0: pt(e), orig: { ...b }, snap: app.snap() };
+    try { e.target.setPointerCapture?.(e.pointerId); } catch (err) { /* pointer already gone */ } draw();
   });
   root.addEventListener("pointermove", e => {
     if (!drag) return;
@@ -242,8 +242,15 @@ export function pageView(app) {
     const q = pt(e), dx = (q.x - drag.p0.x) / AW, dy = (q.y - drag.p0.y) / AH, b = drag.b, o = drag.orig, snap = v => Math.round(v * 200) / 200;
     if (drag.mode === "move") { b.x = snap(clamp(o.x + dx, 0, 1 - b.w)); b.y = snap(clamp(o.y + dy, 0, 1 - b.h)); }
     else { b.w = snap(clamp(o.w + dx, .03, 1 - b.x)); b.h = snap(clamp(o.h + dy, .03, 1 - b.y)); }
-    const area = $("#page-canvas"), sl = area.scrollLeft, stp = area.scrollTop;
-    area.innerHTML = renderPage(app.p, { selected: sel }); size(); area.scrollLeft = sl; area.scrollTop = stp;
+    // move the block's drawing (or its outline when resizing) instead of redrawing the whole page on every mouse move
+    const svg = $("#page-canvas svg"), g = svg && svg.querySelector(`g[data-block="${b.id}"]`);
+    if (!g) return draw();
+    if (drag.mode === "move") g.setAttribute("transform", `translate(${((b.x - o.x) * AW).toFixed(2)},${((b.y - o.y) * AH).toFixed(2)})`);
+    else {
+      const r = g.querySelector("rect.blk"), hd = g.querySelector("[data-resize]"), x = +r.getAttribute("x"), y = +r.getAttribute("y");
+      r.setAttribute("width", b.w * AW); r.setAttribute("height", b.h * AH); r.setAttribute("stroke-dasharray", "2 1");
+      if (hd) { hd.setAttribute("x", x + b.w * AW - 3); hd.setAttribute("y", y + b.h * AH - 3); }
+    }
   });
   root.addEventListener("pointerup", () => { if (drag) { app.pushUndo(drag.snap); drag = null; app.changed(false); draw(); } });
   return { draw, zoomBy, fit };

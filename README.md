@@ -22,7 +22,9 @@ python -m pip install -r requirements.txt
 python -m uvicorn server.main:app --port 8765
 ```
 
-Then open http://localhost:8765. The Python server in `server/` also offers the same imports and exports as a REST API (http://localhost:8765/docs), kept for a future shared back end (SharePoint or Azure); the browser app does not need it.
+Then open http://localhost:8765. The browser app does everything itself and does not need the server.
+
+The server's own REST API (http://localhost:8765/docs) is **older than the app**: it reads and writes XER, TurboChart and Excel as the app did in its first phase, and has none of the later features (logic links, saved views, fill colours, MS Project, bands, resources). It is kept as the starting point for the live P6 connection and a shared back end; do not use its exports for current projects.
 
 ## What it does (phase 1)
 
@@ -85,13 +87,18 @@ The mapping is saved with the data set. Data → Sync from P6 reads a newer XER 
 
 Exported XERs carry three UDFs (`Start Chainage (m)`, `End Chainage (m)`, `Activity Style`, or the labels from your mapping), so chainage you set here can go back into P6 with File → Import in P6 ("Update existing project").
 
+## Checks
+
+`node --test tests/core.test.mjs` runs the automated checks (XER, TurboChart and MS Project round trips, chart geometry with broken chainage, chainage equations, P6 sync, and that a crafted project file cannot inject script). They also run on every push, and a failure stops the site from being published.
+
 ## Project layout
 
 ```
 web/                the app (plain ES modules, no build step); published to GitHub Pages
-web/js/core/        model, P6 XER, TurboChart and Excel import/export, all in the browser
+web/js/core/        model, P6 XER, TurboChart, MS Project and Excel import/export, all in the browser
+tests/              automated checks (Node, no browser needed)
 web/js/api.js       project storage (browser IndexedDB + optional linked file on your PC)
-server/             optional Python REST API with the same imports/exports
+server/             optional local server for the app, plus an older REST API (see above)
 .github/workflows/  publishes web/ to GitHub Pages on every push
 ```
 

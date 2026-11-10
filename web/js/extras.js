@@ -22,7 +22,8 @@ export function onChart(p, a) {
 export function trackOffset(p, a) { if (!a.track) return 0; const tr = (p.tracks || []).find(x => x.name === a.track); return tr ? +tr.offset_px || 0 : 0; }
 export function actGeo(p, G, a) {
   const dx = trackOffset(p, a);
-  return { x0: G.X(a.ch0_m) + dx, x1: G.X(a.ch1_m) + dx, y0: G.Y(tms(a.start)), y1: G.Y(tms(a.finish)), dx };
+  const r = v => Math.round(v * 10) / 10; // a tenth of a pixel is plenty, and keeps the drawing small
+  return { x0: r(G.X(a.ch0_m) + dx), x1: r(G.X(a.ch1_m) + dx), y0: r(G.Y(tms(a.start))), y1: r(G.Y(tms(a.finish))), dx };
 }
 
 // ------------------------------------------------------------------ CSV helpers for band data

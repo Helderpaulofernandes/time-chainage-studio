@@ -1,13 +1,12 @@
 // Dialogs for the chart layout features: axes and dates, broken chainage, equations, side columns, lines / tracks,
 // crews and links; bands; resources; progress lines; rate sheets; Microsoft Project import.
-import { h, $, uid, tms, tstr, dstr, chToM, mToCh, chFmt, chName, niceDate, DAY } from "./util.js";
+import { h, $, uid, tms, tstr, dstr, chToM, mToCh, chFmt, chName, niceDate, DAY, field } from "./util.js";
 import { modal } from "./dialogs.js";
 import { BAND_KINDS, PALETTE, rowsOf, weekStart } from "./extras.js";
 import { makeActivity, makeStyle, newId } from "./core/model.js";
 import * as XER from "./core/xer.js";
 import * as MSP from "./core/mspdi.js";
 
-const field = (label, input, hint) => h("label", { class: "fld" }, h("span", {}, label), input, hint ? h("small", {}, hint) : null);
 const sel = (opts, v, on) => { const s = h("select", { onchange: e => on && on(e.target.value) }); opts.forEach(([k, t]) => s.append(h("option", { value: k }, t))); s.value = v ?? ""; return s; };
 const chk = (v, on, text) => h("label", { class: "chk" }, h("input", { type: "checkbox", checked: !!v, onchange: e => on(e.target.checked) }), " " + text);
 const clone = o => JSON.parse(JSON.stringify(o ?? null));
@@ -31,7 +30,7 @@ function cell(p, r, c) {
   if (c.type === "select") return sel(c.opts, r[c.key], on);
   if (c.type === "check") return h("input", { type: "checkbox", checked: r[c.key] !== false, onchange: e => on(e.target.checked) });
   if (c.type === "color") return h("input", { type: "color", value: r[c.key] || "#C00000", oninput: e => on(e.target.value) });
-  if (c.type === "ch") return h("input", { value: mToCh(p, r[c.key]), style: "width:8em", onchange: e => on(chToM(p, e.target.value)) });
+  if (c.type === "ch" || c.type === "chraw") { const raw = c.type === "chraw"; return h("input", { value: mToCh(p, r[c.key], raw), style: "width:8em", onchange: e => on(chToM(p, e.target.value, raw)) }); }
   if (c.type === "num") return h("input", { type: "number", step: "any", value: r[c.key] ?? "", style: "width:6em", onchange: e => on(e.target.value === "" ? null : +e.target.value) });
   if (c.type === "date") return h("input", { type: "date", value: (r[c.key] || "").slice(0, 10), onchange: e => on(e.target.value) });
   return h("input", { value: r[c.key] ?? "", style: c.width ? `width:${c.width}` : "", onchange: e => on(e.target.value) });
@@ -69,7 +68,7 @@ export function chartLayout(app) {
           rowsTable(p, w.breaks, [{ key: "from_m", label: "From", type: "ch" }, { key: "to_m", label: "To", type: "ch" }], () => ({ from_m: c.start_m, to_m: c.start_m }), "Add a break")),
         h("fieldset", {}, h("legend", {}, "Chainage equations"),
           h("p", { class: "hint" }, `Where the kilometrage jumps (a realignment). Positions stay a running distance; from "At" onwards the ${ch} shown restarts at "Shown as".`),
-          rowsTable(p, w.eqs, [{ key: "at_m", label: "At (running)", type: "ch" }, { key: "value_m", label: "Shown as", type: "ch" }], () => ({ at_m: c.start_m, value_m: c.start_m }), "Add an equation")),
+          rowsTable(p, w.eqs, [{ key: "at_m", label: "At (running)", type: "chraw" }, { key: "value_m", label: "Shown as", type: "chraw" }], () => ({ at_m: c.start_m, value_m: c.start_m }), "Add an equation")),
         h("fieldset", {}, h("legend", {}, "Side columns for work with no chainage"),
           h("p", { class: "hint" }, "Columns beside the chart for design, approvals, procurement or site-wide work, on the same dates. Put an activity in a column from its panel."),
           rowsTable(p, w.cols, [{ key: "name", label: "Name" }, { key: "side", label: "Side", type: "select", opts: [["left", "Left"], ["right", "Right"]] }, { key: "width", label: "Width (px)", type: "num" }, { key: "show", label: "Show", type: "check" }],
@@ -282,39 +281,53 @@ export function fitToData(p, acts) {
 export function msProjectDialog(app) {
   const p = app.p;
   let d = null;
+  // the form's state, by name (an MS Project data set remembers the settings it was imported with)
+  const prev = p.datasets.filter(x => x.source === "msproject");
+  const m = { into: "", ch_start: "", ch_end: "", ch_unit: p.chainage.unit, style: "rules", crew: "", track: "", skip_without_chainage: true, include_milestones: true, name: "",
+    rules: "excavate cut = CUT\nhaul fill = FILL\nfill roadway = FILL\nsubballast = SUBBALLAST\nballast = BALLAST\nbridge = BRIDGE" };
   modal({
     title: "Import from Microsoft Project (XML)", wide: true,
     body: el => {
       const map = h("div");
-      el.append(h("p", { class: "hint" }, "In Microsoft Project use File → Save As → XML Format (*.xml), then choose that file here. (A .mpp file cannot be read by a browser.) Tasks become activities in a new data set; summary tasks are left out; links come across."),
-        field("MS Project XML file", h("input", { type: "file", accept: ".xml", onchange: async e => { try { d = MSP.parse(await e.target.files[0].text()); drawMap(); } catch (err) { app.toast(err.message); } } })), map);
+      el.append(h("p", { class: "hint" }, "In Microsoft Project use File → Save As → XML Format (*.xml), then choose that file here. (A .mpp file cannot be read by a browser.) Summary tasks are left out; links come across. Choose an existing MS Project data set to update it: tasks are matched by their unique ID, and what you set here (labels, crews, lines, columns) is kept."),
+        field("MS Project XML file", h("input", { type: "file", accept: ".xml", onchange: async e => { try { d = MSP.parse(await e.target.files[0].text()); m.name = d.name || "MS Project"; drawMap(); } catch (err) { app.toast(err.message); } } })), map);
       const drawMap = () => {
         map.innerHTML = "";
         const fl = [["", "Not used"], ...d.fields.map(f => [f.id, f.label]), ["wbs", "WBS"], ["name", "Task name"]];
         const guess = re => (d.fields.find(f => re.test(f.label)) || {}).id || "";
+        if (!m.ch_start) m.ch_start = guess(/start.*(ch|sta|mp|km)|^(ch|sta|mp).*start|from/i);
+        if (!m.ch_end) m.ch_end = guess(/end.*(ch|sta|mp|km)|^(ch|sta|mp).*end|to\b/i);
+        const set = k => v => (m[k] = v);
+        const pick = id => { m.into = id; const ds = p.datasets.find(x => x.id === id); if (ds && ds.msp) Object.assign(m, ds.msp); drawMap(); };
         map.append(h("p", { class: "hint" }, `${d.tasks.length} tasks in "${d.name || "the file"}", ${d.tasks.filter(t => t.summary).length} of them summaries; ${d.fields.length} custom fields in use.`),
+          field("Import into", sel([["", "A new data set"], ...prev.map(x => [x.id, `Update "${x.name}"`])], m.into, pick)),
           h("div", { class: "cols" },
             h("fieldset", {}, h("legend", {}, chName(p)[0].toUpperCase() + chName(p).slice(1)),
-              field("Start from", sel(fl, guess(/start.*(ch|sta|mp|km)|^(ch|sta|mp).*start|from/i), null)), field("End from", sel(fl, guess(/end.*(ch|sta|mp|km)|^(ch|sta|mp).*end|to\b/i), null)),
-              field("Values are in", sel([["m", "metres"], ["km", "kilometres"], ["ft", "feet (or 12+34.56 stations)"], ["mi", "miles"]], p.chainage.unit === "ft" ? "ft" : p.chainage.unit === "mi" ? "mi" : p.chainage.unit, null)),
-              chk(true, () => {}, "Leave out tasks with no chainage")),
+              field("Start from", sel(fl, m.ch_start, set("ch_start"))), field("End from", sel(fl, m.ch_end, set("ch_end"))),
+              field("Values are in", sel([["m", "metres"], ["km", "kilometres"], ["ft", "feet (or 12+34.56 stations)"], ["mi", "miles"]], m.ch_unit, set("ch_unit"))),
+              chk(m.skip_without_chainage, set("skip_without_chainage"), "Leave out tasks with no chainage")),
             h("fieldset", {}, h("legend", {}, "Styles and groups"),
-              field("Style from", sel([["rules", "Words in the task name (rules below)"], ["outline1", "Level-1 summary name"], ["outline2", "Level-2 summary name"], ...d.fields.map(f => [f.id, f.label])], "rules", null)),
-              field("Rules: word = style, one per line", h("textarea", { rows: 4 }, "excavate cut = CUT\nhaul fill = FILL\nfill roadway = FILL\nsubballast = SUBBALLAST\nballast = BALLAST\nbridge = BRIDGE")),
-              h("div", { class: "row2" }, field("Crew from", sel([["", "Not used"], ["outline1", "Level-1 summary"], ["outline2", "Level-2 summary"], ...d.fields.map(f => [f.id, f.label])], "", null)),
-                field("Line / track from", sel([["", "Not used"], ...d.fields.map(f => [f.id, f.label])], "", null))),
-              chk(true, () => {}, "Include milestones"),
-              field("Data set name", h("input", { value: d.name || "MS Project" })))));
+              field("Style from", sel([["rules", "Words in the task name (rules below)"], ["outline1", "Level-1 summary name"], ["outline2", "Level-2 summary name"], ...d.fields.map(f => [f.id, f.label])], m.style, set("style"))),
+              field("Rules: word = style, one per line", h("textarea", { rows: 4, oninput: e => (m.rules = e.target.value) }, m.rules)),
+              h("div", { class: "row2" }, field("Crew from", sel([["", "Not used"], ["outline1", "Level-1 summary"], ["outline2", "Level-2 summary"], ...d.fields.map(f => [f.id, f.label])], m.crew, set("crew"))),
+                field("Line / track from", sel([["", "Not used"], ...d.fields.map(f => [f.id, f.label])], m.track, set("track")))),
+              chk(m.include_milestones, set("include_milestones"), "Include milestones"),
+              m.into ? null : field("Data set name", h("input", { value: m.name, oninput: e => (m.name = e.target.value) })))));
       };
     },
-    buttons: [{ label: "Cancel" }, { label: "Import", primary: true, onClick: ({ close, setMsg, dlg }) => {
+    buttons: [{ label: "Cancel" }, { label: "Import", primary: true, onClick: ({ close, setMsg }) => {
       if (!d) return setMsg("Choose the XML file first.", "err");
-      const s = [...dlg.querySelectorAll(".modal-body select")], cbs = [...dlg.querySelectorAll(".modal-body fieldset input[type=checkbox]")];
-      const m = { ch_start: s[0].value, ch_end: s[1].value, ch_unit: s[2].value, style: s[3].value, rules: dlg.querySelector(".modal-body textarea").value, crew: s[4].value, track: s[5].value,
-        skip_without_chainage: cbs[0].checked, include_milestones: cbs[1].checked };
       if (!m.ch_start && !m.ch_end && m.skip_without_chainage) return setMsg("Choose the fields that hold the start and end chainage, or untick 'Leave out tasks with no chainage'.", "err");
-      const ds = { id: newId("ds_"), name: dlg.querySelector(".modal-body fieldset:last-child input:not([type])").value || "MS Project", source: "msproject" };
-      const r = MSP.toActivities(d, m, p, ds.id);
+      const { into, name, ...mapping } = m;
+      if (into) {
+        const ds = p.datasets.find(x => x.id === into);
+        app.commit(); const rp = MSP.sync(p, d, mapping, into); ds.msp = mapping;
+        close(); app.changed();
+        app.toast(`Updated "${ds.name}": ${rp.added.length} added, ${rp.changed.length} changed, ${rp.removed.length} removed, ${rp.unchanged} unchanged.`);
+        return;
+      }
+      const ds = { id: newId("ds_"), name: name || "MS Project", source: "msproject", msp: mapping };
+      const r = MSP.toActivities(d, mapping, p, ds.id);
       if (!r.activities.length) return setMsg(`No tasks came across (${r.skipped.no_chainage} had no chainage). Check the chainage fields.`, "err");
       app.commit(); const empty = !p.activities.length;
       p.datasets.push(ds); p.styles.push(...r.new_styles); p.activities.push(...r.activities); p.view.main_dataset = ds.id;

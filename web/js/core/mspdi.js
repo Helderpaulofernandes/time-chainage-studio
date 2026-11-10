@@ -1,9 +1,9 @@
 // Microsoft Project XML (MSPDI) reader: tasks, dates, WBS, custom fields and links. In MS Project use
 // File > Save As > "XML Format (*.xml)". Native .mpp files are a closed binary format that a browser cannot read.
-import { makeActivity, makeStyle, fmtT, parseT, DAY } from "./model.js";
-import { chainageToM } from "./xer.js";
+import { makeActivity, makeStyle, fmtT, parseT, DAY, STYLE_PALETTE } from "./model.js";
+import { chainageToM, LOCAL_FIELDS } from "./xer.js";
 
-const PALETTE = ["#002060", "#00B0F0", "#FFC000", "#92D050", "#C00000", "#C65911", "#7030A0", "#548235", "#FF66CC", "#996633", "#404040", "#1F8A86"];
+const PALETTE = STYLE_PALETTE;
 // Custom field ids MS Project writes in ExtendedAttribute/FieldID (Task Text1–30, Number1–20, Outline Code1–10)
 const FIELD_NAMES = (() => {
   const m = {};
@@ -86,4 +86,26 @@ export function toActivities(d, m, project, datasetId) {
   const byUid = new Map(acts.map(a => [a.ms.uid, a]));
   for (const a of acts) { for (const l of a._preds || []) { const b = byUid.get(l.uid); if (b) (a.links ||= []).push({ code: b.code, type: l.type, lag_days: l.lag_days }); } delete a._preds; }
   return { activities: acts, new_styles: newStyles, skipped };
+}
+
+// Re-read a newer file into an existing data set: tasks are matched by their unique ID (which, unlike the task ID,
+// does not change when tasks are inserted). What was set in the app is kept, as with a P6 sync.
+export function sync(project, d, m, datasetId) {
+  const res = toActivities(d, m, project, datasetId);
+  const old = new Map(project.activities.filter(a => a.dataset === datasetId && a.ms).map(a => [a.ms.uid, a]));
+  const keep = project.activities.filter(a => !(a.dataset === datasetId && a.ms));
+  const added = [], changed = []; let unchanged = 0;
+  for (const a of res.activities) {
+    const o = old.get(a.ms.uid);
+    if (o) {
+      old.delete(a.ms.uid);
+      const diff = ["code", "name", "start", "finish", "ch0_m", "ch1_m", "style"].filter(k => o[k] !== a[k]);
+      for (const k of LOCAL_FIELDS) if (k in o && !(k === "crew" && m.crew) && !(k === "track" && m.track)) a[k] = o[k];
+      diff.length ? changed.push({ code: a.code, fields: diff }) : unchanged++;
+    } else added.push(a.code);
+    keep.push(a);
+  }
+  project.activities = keep;
+  const have = new Set(project.styles.map(s => s.code)); project.styles.push(...res.new_styles.filter(s => !have.has(s.code)));
+  return { added, changed, removed: [...old.values()].map(a => a.code), unchanged, skipped: res.skipped };
 }

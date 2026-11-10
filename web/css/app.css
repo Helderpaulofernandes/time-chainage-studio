@@ -175,3 +175,6 @@ legend { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; padd
   #print-root svg { width: 100%; height: auto; display: block; }
   body { background: #fff; }
 }
+
+/* hover tooltip on the chart */
+.tip { position: fixed; z-index: 50; max-width: 270px; padding: 5px 8px; border-radius: 4px; background: #18262B; color: #fff; font-size: 12px; line-height: 1.35; pointer-events: none; box-shadow: 0 2px 8px rgba(0,0,0,.25); }

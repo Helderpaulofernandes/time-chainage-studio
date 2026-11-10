@@ -1,8 +1,7 @@
 // Primavera P6 XER in the browser: read, describe for field mapping, map onto a project, sync, and write.
-import { makeActivity, makeStyle, parseT, fmtT, DAY, unitFactor } from "./model.js";
+import { makeActivity, makeStyle, parseT, fmtT, DAY, unitFactor, STYLE_PALETTE } from "./model.js";
 
-export const PALETTE = ["#002060", "#00B0F0", "#FFC000", "#92D050", "#C00000", "#C65911", "#7030A0", "#548235", "#FF66CC",
-  "#996633", "#404040", "#1F8A86", "#8B0000", "#7F7F7F", "#E2C46B", "#4F81BD"];
+export const PALETTE = STYLE_PALETTE;
 export const DATE_FIELDS = {
   early_start_date: "Early start", early_end_date: "Early finish", target_start_date: "Planned start", target_end_date: "Planned finish",
   late_start_date: "Late start", late_end_date: "Late finish", act_start_date: "Actual start", act_end_date: "Actual finish",
@@ -135,6 +134,7 @@ export function applyMapping(x, m, project, datasetId) {
   return { activities: acts, new_styles: newStyles, skipped };
 }
 
+export const LOCAL_FIELDS = ["id", "label", "footprint", "notes", "qty", "qty_unit", "rate", "rate_unit", "crew", "track", "col", "fin_ch0_m", "fin_ch1_m"];
 // Re-read a newer XER with the saved mapping; match by Activity ID and keep local label / footprint / productivity settings.
 export function sync(project, x, m, datasetId) {
   const res = applyMapping(x, m, project, datasetId);
@@ -146,7 +146,8 @@ export function sync(project, x, m, datasetId) {
     if (o) {
       old.delete(a.code);
       const diff = ["name", "start", "finish", "ch0_m", "ch1_m", "style"].filter(k => o[k] !== a[k]);
-      for (const k of ["id", "label", "footprint", "notes", "qty", "qty_unit", "rate", "rate_unit"]) a[k] = o[k];
+      // what was set here (not in P6) survives a sync
+      for (const k of LOCAL_FIELDS) if (k in o) a[k] = o[k];
       diff.length ? changed.push({ code: a.code, fields: diff }) : unchanged++;
     } else added.push(a.code);
     keep.push(a);

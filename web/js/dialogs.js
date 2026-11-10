@@ -2,7 +2,7 @@
 import { api } from "./api.js";
 import { corridorLanes, STAGE_COLOURS } from "./corridor.js";
 import { listBrands, saveBrand, deleteBrand, projectCopy, readLogo, onColour, BRAND_DEFAULTS } from "./brand.js";
-import { h, esc, $, $$, chFmt, chToM, mToCh, uid, tms, niceDate, niceFinish, unitFactor, setDateOrder, chIsStation } from "./util.js";
+import { h, esc, $, $$, chFmt, chToM, mToCh, uid, tms, niceDate, niceFinish, unitFactor, setDateOrder, chIsStation, field } from "./util.js";
 
 // ------------------------------------------------------------------ modal framework
 export function modal({ title, body, buttons = [], wide = false, onClose }) {
@@ -35,7 +35,6 @@ export function confirmBox(title, text, okLabel = "OK") {
     buttons: [{ label: "Cancel", onClick: ({ close }) => { close(); res(false); } }, { label: okLabel, primary: true, onClick: ({ close }) => { close(); res(true); } }] }));
 }
 
-const field = (label, input, hint) => h("label", { class: "fld" }, h("span", {}, label), input, hint ? h("small", {}, hint) : null);
 const inp = (id, value = "", attrs = {}) => h("input", { id, value: value ?? "", ...attrs });
 const sel = (id, opts, value) => { const s = h("select", { id }); opts.forEach(([v, t]) => s.append(h("option", { value: v }, t))); if (value != null) s.value = value; return s; };
 const val = (root, id) => $("#" + id, root)?.value ?? "";
