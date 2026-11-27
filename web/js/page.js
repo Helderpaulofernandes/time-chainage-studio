@@ -25,7 +25,8 @@ function fillText(t, p) {
 export function renderPage(p, { selected = null, forPrint = false } = {}) {
   const pg = p.page, [PWmm, PHmm] = paperSize(pg), mg = pg.margins_mm;
   const AW = PWmm - mg.left - mg.right, AH = PHmm - mg.top - mg.bottom;
-  let o = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${PWmm} ${PHmm}" width="${PWmm}mm" height="${PHmm}mm" font-family="${FONT}">`;
+  setPageBrand(p);
+  let o = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${PWmm} ${PHmm}" width="${PWmm}mm" height="${PHmm}mm" font-family="${esc(PAGE_FONT)}">`;
   o += `<rect width="${PWmm}" height="${PHmm}" fill="#fff"/>`;
   if (!forPrint) o += `<rect x="${mg.left}" y="${mg.top}" width="${AW}" height="${AH}" fill="none" stroke="#9AA5A8" stroke-width=".2" stroke-dasharray="2 1.5"/>`;
   for (const b of pg.blocks) {
@@ -34,7 +35,7 @@ export function renderPage(p, { selected = null, forPrint = false } = {}) {
     o += `<g data-block="${b.id}">`;
     if (b.kind === "chart") {
       const { svg } = renderChart(chartProject(p, b), { width: iw - 8, height: ih - 8, compact: iw < 1400 });
-      if (b.caption) o += `<text x="${x + 2}" y="${y + 4}" font-size="3" font-weight="700" fill="#18262B">${esc(fillText(b.caption, p))}</text>`;
+      if (b.caption) o += `<text x="${x + 2}" y="${y + 4}" font-size="3" font-weight="700" fill="${INK}">${esc(fillText(b.caption, p))}</text>`;
       o += `<svg x="${x + 1}" y="${y + 1}" width="${w - 2}" height="${hh - 2}" viewBox="0 0 ${iw - 8} ${ih - 8}" preserveAspectRatio="xMidYMid meet">${svg}</svg>`;
     } else if (b.kind === "legend") {
       const lg = renderLegend(p, { width: iw, size: b.font_size || 11 });
@@ -50,14 +51,16 @@ export function renderPage(p, { selected = null, forPrint = false } = {}) {
       const m = p.meta, cells = [["Project", m.title || p.name], ["Client", m.client], ["Contract", m.contract], ["Option", (p.datasets.find(d => d.id === p.view.main_dataset) || {}).name],
         ["Revision", m.revision], ["Prepared by", m.author], ["Date", niceDate(Date.now())], ["Scale", chartScale(p) || `${pg.paper} ${pg.orientation}`]];
       // the brand logo takes a cell on the left of the title block
-      const lw = p.brand && p.brand.logo ? Math.min(w * 0.3, logoWidth(p.brand, hh - 3) + 3) : 0;
-      if (lw) { o += `<rect x="${x}" y="${y}" width="${lw}" height="${hh}" fill="#fff" stroke="#18262B" stroke-width=".2"/>` + logoSvg(p.brand, x + 1.5, y + 1.5, lw - 3, hh - 3, "center"); }
+      // logos get clear space all round equal to their height (the usual brand rule: one icon-height of exclusion zone)
+      const lr = p.brand && p.brand.logo ? (p.brand.logo_w || 3) / (p.brand.logo_h || 1) : 0;
+      const lw = lr ? Math.min(w * 0.3, (hh / 3) * (lr + 2)) : 0, lh = lr ? Math.min(hh / 3, lw / (lr + 2)) : 0;
+      if (lw) { o += `<rect x="${x}" y="${y}" width="${lw}" height="${hh}" fill="#fff" stroke="${INK}" stroke-width=".2"/>` + logoSvg(p.brand, x + (lw - lr * lh) / 2, y + (hh - lh) / 2, lr * lh, lh, "center"); }
       const cols = 2, rows = Math.ceil(cells.length / cols), cw = (w - lw) / cols, rh = hh / rows;
       cells.forEach(([k, v], i) => {
         const cx = x + lw + (i % cols) * cw, cy = y + Math.floor(i / cols) * rh;
-        o += `<rect x="${cx}" y="${cy}" width="${cw}" height="${rh}" fill="none" stroke="#18262B" stroke-width=".2"/>`;
-        o += `<text x="${cx + 1.2}" y="${cy + Math.min(2.6, rh * .35)}" font-size="${Math.min(1.9, rh * .28)}" fill="#5D6B70" letter-spacing=".1">${esc(k.toUpperCase())}</text>`;
-        o += `<text x="${cx + 1.2}" y="${cy + rh - Math.min(1.4, rh * .2)}" font-size="${Math.min(3.4, rh * .45)}" fill="#18262B">${esc(clip(v || "", cw / (Math.min(3.4, rh * .45) * .5)))}</text>`;
+        o += `<rect x="${cx}" y="${cy}" width="${cw}" height="${rh}" fill="none" stroke="${INK}" stroke-width=".2"/>`;
+        o += `<text x="${cx + 1.2}" y="${cy + Math.min(2.6, rh * .35)}" font-size="${Math.min(1.9, rh * .28)}" fill="${LABEL}" letter-spacing=".1">${esc(k.toUpperCase())}</text>`;
+        o += `<text x="${cx + 1.2}" y="${cy + rh - Math.min(1.4, rh * .2)}" font-size="${Math.min(3.4, rh * .45)}" fill="${INK}">${esc(clip(v || "", cw / (Math.min(3.4, rh * .45) * .5)))}</text>`;
       });
     } else if (b.kind === "summary") {
       o += summaryBlock(p, b, x, y, w, hh);
@@ -68,19 +71,19 @@ export function renderPage(p, { selected = null, forPrint = false } = {}) {
       let ty = y + PAD;
       if (L.head) {
         ty += L.headSize;
-        o += `<text x="${x + PAD}" y="${ty}" font-size="${L.headSize}" font-weight="700" letter-spacing=".15" fill="#18262B">${esc(L.head)}</text>`;
+        o += `<text x="${x + PAD}" y="${ty}" font-size="${L.headSize}" font-weight="700" letter-spacing=".15" fill="${INK}">${esc(L.head)}</text>`;
         ty += L.headSize * 0.45;
-        o += `<line x1="${x + PAD}" x2="${x + w - PAD}" y1="${ty}" y2="${ty}" stroke="#18262B" stroke-width=".2"/>`;
+        o += `<line x1="${x + PAD}" x2="${x + w - PAD}" y1="${ty}" y2="${ty}" stroke="${INK}" stroke-width=".2"/>`;
         ty += L.headSize * 0.35;
       }
       L.lines.forEach(ln => {
         ty += L.fsz * LINE;
-        o += `<text x="${x + PAD}" y="${ty}" font-size="${L.fsz}" font-weight="${b.bold ? 700 : 400}" fill="#18262B" xml:space="preserve">${esc(ln)}</text>`;
+        o += `<text x="${x + PAD}" y="${ty}" font-size="${L.fsz}" font-weight="${b.bold ? 700 : 400}" fill="${INK}" xml:space="preserve">${esc(ln)}</text>`;
       });
       if (L.hidden && !forPrint) o += `<text x="${x + w - PAD}" y="${y + hh - 1}" font-size="2.4" text-anchor="end" fill="#B13A3A">+${L.hidden} more lines</text>`;
       overflow[b.id] = L.hidden;
     }
-    if (b.border) o += `<rect x="${x}" y="${y}" width="${w}" height="${hh}" fill="none" stroke="#18262B" stroke-width=".3"/>`;
+    if (b.border) o += `<rect x="${x}" y="${y}" width="${w}" height="${hh}" fill="none" stroke="${INK}" stroke-width=".3"/>`;
     if (!forPrint) {
       o += `<rect class="blk" data-block="${b.id}" x="${x}" y="${y}" width="${w}" height="${hh}" fill="transparent" stroke="${selected === b.id ? PAPER.sel : "transparent"}" stroke-width=".8"/>`;
       if (selected === b.id) o += `<rect data-resize="${b.id}" x="${x + w - 3}" y="${y + hh - 3}" width="6" height="6" fill="${PAPER.sel}"/>`;
@@ -98,9 +101,22 @@ const overflow = {}; // block id -> lines that did not fit at the last draw
 const KIND_NAMES = { text: "Text", title: "Title", legend: "Legend", titleblock: "Title block", chart: "Chart", image: "Image", summary: "Summary", calendar: "Calendar" };
 export const blockName = b => (b.title || "").trim() || KIND_NAMES[b.kind] || b.kind;
 let measureCtx = null;
+// Page furniture (title, title block, notes, summary) takes the brand's colour and font; charts keep their own font so
+// dense labels still fit. INK: text and rules; LABEL: title-block captions (the brand accent).
+let INK = "#18262B", LABEL = "#5D6B70", PAGE_FONT = FONT;
+function setPageBrand(p) {
+  const b = p.brand || {};
+  INK = b.colour || "#18262B"; LABEL = b.accent && b.font ? b.accent : "#5D6B70";
+  PAGE_FONT = b.font ? `${b.font}, ${FONT}` : FONT;
+}
+// The page font is ready to measure and draw (bundled web fonts load on first use).
+export function pageFontReady(p) {
+  const f = p && p.brand && p.brand.font; if (!f || typeof document === "undefined" || !document.fonts) return Promise.resolve();
+  return Promise.all([400, 600, 700].map(w => document.fonts.load(`${w} 12px "${f}"`))).catch(() => {});
+}
 function textWidthMm(s, sizeMm, bold) {
   if (!measureCtx) measureCtx = document.createElement("canvas").getContext("2d");
-  measureCtx.font = `${bold ? 700 : 400} 100px "IBM Plex Sans Condensed", "Arial Narrow", Arial, sans-serif`;
+  measureCtx.font = `${bold ? 700 : 400} 100px ${PAGE_FONT.split(",").map(f => (/\s/.test(f.trim()) && !/^["']/.test(f.trim()) ? `"${f.trim()}"` : f.trim())).join(", ")}`;
   return (measureCtx.measureText(s).width / 100) * sizeMm;
 }
 function wrap(text, maxMm, sizeMm, bold) {
@@ -163,6 +179,7 @@ export function pageView(app) {
     const st = $("#st-cursor"); if (st && app.view === "page") st.textContent = `Page zoom ${Math.round(zoom * 100)}%`;
   }
   function draw() {
+    if (app.p.brand && app.p.brand.font && document.fonts && !document.fonts.check(`12px "${app.p.brand.font}"`)) pageFontReady(app.p).then(() => draw());
     const area = $("#page-canvas"), sl = area.scrollLeft, stp = area.scrollTop, list = sheetList(app.p), many = list.length > 1;
     area.classList.toggle("many", many);
     const tabs = `<div class="sheet-tabs" role="tablist">` + list.map((s, i) => `<button type="button" role="tab" class="sheet-tab${s.active ? " active" : ""}" data-tab="${esc(s.id)}" aria-selected="${s.active}">${i + 1}. ${esc(s.name)}</button>`).join("")
@@ -315,7 +332,8 @@ const selEl = (opts, v, on) => { const s = h("select", { onchange: e => on(e.tar
 const numEl = (v, on) => h("input", { type: "number", step: "any", value: v, onchange: e => { const n = parseFloat(e.target.value); if (!isNaN(n)) on(n); } });
 const slug = s => String(s).replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "") || "time_chainage";
 
-export function printPage(p, { only = null } = {}) {
+export async function printPage(p, { only = null } = {}) {
+  await pageFontReady(p);
   const sheets = sheetList(p).filter(s => only !== "active" || s.active);
   const [W, H] = paperSize(sheets[0].page);
   let st = $("#print-page-size");
@@ -389,11 +407,11 @@ export function summaryRows(p, metrics = SUMMARY_DEFAULT) {
 }
 function summaryBlock(p, b, x, y, w, hh) {
   const rows = summaryRows(p, b.metrics || SUMMARY_DEFAULT), fs = (b.font_size || 9) * PT, title = (b.title || "Summary").toUpperCase();
-  let o = `<text x="${x + PAD}" y="${y + PAD + fs * 1.1}" font-size="${fs * 1.1}" font-weight="700" letter-spacing=".15" fill="#18262B">${esc(title)}</text>`;
+  let o = `<text x="${x + PAD}" y="${y + PAD + fs * 1.1}" font-size="${fs * 1.1}" font-weight="700" letter-spacing=".15" fill="${INK}">${esc(title)}</text>`;
   let ty = y + PAD + fs * 1.1 + fs * 0.8;
-  o += `<line x1="${x + PAD}" x2="${x + w - PAD}" y1="${ty - fs * 0.4}" y2="${ty - fs * 0.4}" stroke="#18262B" stroke-width=".2"/>`;
+  o += `<line x1="${x + PAD}" x2="${x + w - PAD}" y1="${ty - fs * 0.4}" y2="${ty - fs * 0.4}" stroke="${INK}" stroke-width=".2"/>`;
   for (const [k, v] of rows) { ty += fs * LINE; if (ty > y + hh - PAD) break;
-    o += `<text x="${x + PAD}" y="${ty}" font-size="${fs}" fill="#5D6B70">${esc(k)}</text><text x="${x + w - PAD}" y="${ty}" font-size="${fs}" font-weight="600" text-anchor="end" fill="#18262B">${esc(v)}</text>`; }
+    o += `<text x="${x + PAD}" y="${ty}" font-size="${fs}" fill="#5D6B70">${esc(k)}</text><text x="${x + w - PAD}" y="${ty}" font-size="${fs}" font-weight="600" text-anchor="end" fill="${INK}">${esc(v)}</text>`; }
   return o;
 }
 function calendarBlock(p, b, x, y, w, hh) {
@@ -406,12 +424,12 @@ function calendarBlock(p, b, x, y, w, hh) {
   let o = "";
   for (let i = 0; i < n; i++) {
     const mx = x + 1 + (i % cols) * cw + (cw - cell * 7) / 2, my = y + 1 + Math.floor(i / cols) * ch + cell * 0.2, m0 = Date.UTC(fy, fm - 1 + i, 1), dt = new Date(m0);
-    o += `<text x="${mx + cell * 3.5}" y="${my + cell * 0.8}" font-size="${fs * 1.15}" font-weight="700" text-anchor="middle" fill="#18262B">${MON[dt.getUTCMonth()]} ${dt.getUTCFullYear()}</text>`;
+    o += `<text x="${mx + cell * 3.5}" y="${my + cell * 0.8}" font-size="${fs * 1.15}" font-weight="700" text-anchor="middle" fill="${INK}">${MON[dt.getUTCMonth()]} ${dt.getUTCFullYear()}</text>`;
     const lead = (dt.getUTCDay() - ws + 7) % 7, days = new Date(Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth() + 1, 0)).getUTCDate();
     for (let d = 0; d < days; d++) {
       const k = lead + d, cx = mx + (k % 7) * cell, cy = my + cell * 1.2 + Math.floor(k / 7) * cell, t = m0 + d * DAY;
       const stood = sd.some(([a, c]) => t >= a && t < c), fill = stood ? "#E06666" : off(t) ? "#F4CCCC" : "#FFFFFF";
-      o += `<rect x="${cx}" y="${cy}" width="${cell * 0.94}" height="${cell * 0.94}" fill="${fill}" stroke="#C9D2D2" stroke-width=".1"/><text x="${cx + cell * 0.47}" y="${cy + cell * 0.66}" font-size="${fs * 0.85}" text-anchor="middle" fill="#18262B">${d + 1}</text>`;
+      o += `<rect x="${cx}" y="${cy}" width="${cell * 0.94}" height="${cell * 0.94}" fill="${fill}" stroke="#C9D2D2" stroke-width=".1"/><text x="${cx + cell * 0.47}" y="${cy + cell * 0.66}" font-size="${fs * 0.85}" text-anchor="middle" fill="${INK}">${d + 1}</text>`;
     }
   }
   return o;

@@ -1,4 +1,9 @@
 /* Layout: desktop drawing-office app — menu bar, tool bar, chart canvas (always paper white) with a property panel on the right, status bar. */
+/* Montserrat (SIL OFL, web/fonts/montserrat/OFL.txt): optional brand font for page furniture */
+@font-face { font-family: "Montserrat"; font-style: normal; font-weight: 400; font-display: swap; src: url("../fonts/montserrat/montserrat-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "Montserrat"; font-style: normal; font-weight: 500; font-display: swap; src: url("../fonts/montserrat/montserrat-latin-500-normal.woff2") format("woff2"); }
+@font-face { font-family: "Montserrat"; font-style: normal; font-weight: 600; font-display: swap; src: url("../fonts/montserrat/montserrat-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "Montserrat"; font-style: normal; font-weight: 700; font-display: swap; src: url("../fonts/montserrat/montserrat-latin-700-normal.woff2") format("woff2"); }
 :root {
   --paper: #F3F5F4; --sheet: #FFFFFF; --ink: #18262B; --muted: #5D6B70; --rule: #C9D2D2; --faint: #E6EBEA;
   --accent: #1F6E8C; --amber: #C26A12; --ok: #2F8A55; --warn: #B13A3A; --sel: #E0A400;
