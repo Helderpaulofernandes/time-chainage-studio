@@ -173,6 +173,8 @@ legend { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; padd
   #app, #toast, dialog { display: none !important; }
   #print-root { display: block; }
   #print-root svg { width: 100%; height: auto; display: block; }
+  #print-root .print-sheet { break-after: page; page-break-after: always; }
+  #print-root .print-sheet:last-child { break-after: auto; page-break-after: auto; }
   body { background: #fff; }
 }
 

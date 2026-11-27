@@ -1,6 +1,7 @@
 // Time-chainage drawing engine. Produces SVG markup for the screen and for the printed page.
 // Chainage runs across, time runs down (or up). Everything is placed through one geometry object.
 import { DAY, MON, tms, esc, chFmt, chUnitLabel, lenFmt, isoWeek, labelText, niceDate, niceFinish } from "./util.js";
+import { timeEndMs } from "./core/model.js";
 import { bandHeight, bandsSvg, sideColsSvg, resourcesSvg, overlaysSvg, headerPinsSvg, onChart, actGeo } from "./extras.js";
 
 export const PAPER = { ink: "#18262B", muted: "#5D6B70", rule: "#C9D2D2", faint: "#EEF2F1", band: "#EDF2F1", band2: "#E2EAE8",
@@ -70,7 +71,7 @@ export function geometry(p, opts = {}) {
   const aboveH = bands.filter(b => b.position === "above").reduce((n, b) => n + bh(b) + 6, 0);
   const ax = c.axis || "both", axTop = ax === "both" || ax === "top", axBot = ax === "both" || ax === "bottom";
   const top = aboveTop + aboveH + (axTop ? AX : 8);
-  const t0 = tms(T.start), t1 = tms(T.finish) + DAY;
+  const t0 = tms(T.start), t1 = timeEndMs(T.finish); // a date-only finish includes that whole day; "…T08:30" is exact
   const nd = Math.max(1, (t1 - t0) / DAY);
   const belowH = bands.filter(b => b.position !== "above").reduce((n, b) => n + bh(b) + 6, 0);
   const bottomPad = (axBot ? 36 : 12) + belowH;

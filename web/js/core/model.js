@@ -117,8 +117,71 @@ export function normalise(p) {
   });
   if (!p.datasets.length) p.datasets = base.datasets;
   if (!p.datasets.some(d => d.id === p.view.main_dataset)) p.view.main_dataset = p.datasets[0].id;
+  normaliseSheets(p);
   return sanitise(p);
 }
+
+// ------------------------------------------------------------------ sheets
+// A project can hold several page layouts ("sheets"), printed in order. The sheet being edited always lives in
+// p.page, so everything that reads p.page keeps working; p.sheets lists every sheet in order, and the entry for the
+// active sheet has page: null (its layout is p.page). Projects without p.sheets have one sheet, p.page.
+// This keeps one copy of each layout in the file and in undo snapshots (no shared objects to fall apart on restore).
+export function normaliseSheets(p) {
+  if (!Array.isArray(p.sheets) || !p.sheets.length) { delete p.sheets; delete p.sheet_active; return p; }
+  const seen = new Set();
+  p.sheets = p.sheets.filter(s => s && typeof s === "object").map((s, i) => {
+    let id = safeId(s.id) || "sh" + (i + 1); while (seen.has(id)) id += "_"; seen.add(id);
+    return { id, name: String(s.name || `Sheet ${i + 1}`), page: s.page && typeof s.page === "object" && Array.isArray(s.page.blocks) ? s.page : null };
+  });
+  if (!p.sheets.length) { delete p.sheets; delete p.sheet_active; return p; }
+  let act = p.sheets.find(s => s.id === p.sheet_active && !s.page) || p.sheets.find(s => !s.page);
+  if (!act) { act = p.sheets.find(s => s.id === p.sheet_active) || p.sheets[0]; p.page = act.page; act.page = null; }
+  for (const s of p.sheets) if (s !== act && !s.page) s.page = JSON.parse(JSON.stringify(p.page)); // a second "active" entry: give it a copy
+  p.sheet_active = act.id;
+  return p;
+}
+// Every sheet in order as { id, name, page, active }, without changing the project.
+export function sheetList(p) {
+  if (!Array.isArray(p.sheets) || !p.sheets.length) return [{ id: "sh1", name: (p.page && p.page.name) || "Sheet 1", page: p.page, active: true }];
+  return p.sheets.map(s => ({ id: s.id, name: s.name, page: s.page || p.page, active: !s.page }));
+}
+// The project as it would draw for one sheet (p.page replaced); used for printing every sheet.
+export const withSheet = (p, sheet) => (sheet.page === p.page ? p : { ...p, page: sheet.page });
+function ensureSheets(p) { if (!Array.isArray(p.sheets) || !p.sheets.length) { p.sheets = [{ id: "sh1", name: "Sheet 1", page: null }]; p.sheet_active = "sh1"; } return p.sheets; }
+export function switchSheet(p, id) {
+  const list = ensureSheets(p), to = list.find(s => s.id === id), from = list.find(s => !s.page);
+  if (!to || to === from) return p;
+  from.page = p.page; p.page = to.page; to.page = null; p.sheet_active = to.id;
+  return p;
+}
+// New sheet after the active one: a copy of the active layout (or the default layout), made active.
+export function addSheet(p, name = null, copy = true) {
+  const list = ensureSheets(p), at = list.findIndex(s => !s.page);
+  const page = copy ? JSON.parse(JSON.stringify(p.page)) : { ...defaultPage(), paper: p.page.paper, orientation: p.page.orientation };
+  let n = list.length + 1, id = "sh" + n; while (list.some(s => s.id === id)) id = "sh" + ++n;
+  const s = { id, name: name || `Sheet ${list.length + 1}`, page };
+  list.splice(at + 1, 0, s);
+  return switchSheet(p, id);
+}
+export function removeSheet(p, id) {
+  const list = p.sheets; if (!Array.isArray(list) || list.length < 2) return p;
+  const i = list.findIndex(s => s.id === id); if (i < 0) return p;
+  if (!list[i].page) switchSheet(p, list[i === 0 ? 1 : i - 1].id);
+  list.splice(list.findIndex(s => s.id === id), 1);
+  if (list.length === 1) { delete p.sheets; delete p.sheet_active; }
+  return p;
+}
+export function moveSheet(p, id, by) {
+  const list = p.sheets; if (!Array.isArray(list)) return p;
+  const i = list.findIndex(s => s.id === id), j = i + by; if (i < 0 || j < 0 || j >= list.length) return p;
+  [list[i], list[j]] = [list[j], list[i]]; return p;
+}
+
+// ------------------------------------------------------------------ time spans
+// A chart's time range: start and finish are "YYYY-MM-DD" (whole days; the finish day is drawn in full) or
+// "YYYY-MM-DDTHH:MM" (exact; lets a sheet or saved view frame a possession to the hour).
+export const hasTime = s => /T\d\d:\d\d/.test(String(s || ""));
+export const timeEndMs = f => (hasTime(f) ? parseT(f) : parseT(f) + DAY);
 
 // ------------------------------------------------------------------ sanitising
 // A project file can come from anyone. Everything that goes into the chart drawing as an attribute (colours, ids,
@@ -128,6 +191,7 @@ const IMG = /^data:image\/(png|jpe?g|gif|webp|svg\+xml);base64,[A-Za-z0-9+/=\s]*
 export const safeColour = (v, fb = null) => { if (typeof v !== "string") return fb; if (HEX6.test(v)) return v; const m = HEX3.exec(v); return m ? `#${m[1]}${m[1]}${m[2]}${m[2]}${m[3]}${m[3]}` : fb; };
 export const safeImage = v => (typeof v === "string" && IMG.test(v) ? v : null);
 export const safeId = v => (v == null || v === "" ? v : String(v).replace(/[^\w.:-]/g, "_"));
+const TIME = /^\d{4}-\d\d-\d\d(T\d\d:\d\d)?$/;
 const num = (v, fb) => (v === "" || v == null || !Number.isFinite(+v) ? fb : +v);
 const oneOf = (v, list, fb) => (list.includes(v) ? v : fb);
 export function sanitise(p) {
@@ -164,11 +228,12 @@ export function sanitise(p) {
   for (const b of arr("bands")) { b.id = safeId(b.id); b.height = num(b.height, null); b.cut_colour = safeColour(b.cut_colour, null); b.fill_colour = safeColour(b.fill_colour, null); b.colours = (b.colours || []).map(x => safeColour(x, "#7F7F7F")); b.types = b.types ? b.types.map(safeId) : b.types; }
   for (const s of arr("side_cols")) { s.id = safeId(s.id); s.width = num(s.width, 90); s.side = oneOf(s.side, ["left", "right"], "left"); }
   for (const tr of arr("tracks")) tr.offset_px = num(tr.offset_px, 0);
-  for (const v of arr("views")) { v.id = safeId(v.id); v.ch_from = num(v.ch_from, null); v.ch_to = num(v.ch_to, null); }
+  for (const v of arr("views")) { v.id = safeId(v.id); v.ch_from = num(v.ch_from, null); v.ch_to = num(v.ch_to, null); for (const k of ["t_from", "t_to"]) v[k] = TIME.test(String(v[k] || "")) ? String(v[k]) : null; }
   if (p.resources) { for (const s of p.resources.series || []) { s.id = safeId(s.id); s.colour = safeColour(s.colour, "#7F7F7F"); } if (p.resources.panel) p.resources.panel.width = num(p.resources.panel.width, 150); }
   if (p.header_image) { p.header_image.data = safeImage(p.header_image.data); for (const k of ["height_px", "opacity", "nat_w", "nat_h", "ch_start_m", "ch_end_m"]) p.header_image[k] = num(p.header_image[k], k === "opacity" ? 1 : null); if (!p.header_image.data) p.header_image = null; }
   if (p.brand) { p.brand.logo = safeImage(p.brand.logo); p.brand.colour = safeColour(p.brand.colour, "#18262B"); p.brand.accent = safeColour(p.brand.accent, "#C00000"); p.brand.logo_w = num(p.brand.logo_w, 0); p.brand.logo_h = num(p.brand.logo_h, 0); }
-  for (const b of (p.page && p.page.blocks) || []) { b.id = safeId(b.id); if (b.data) b.data = safeImage(b.data); for (const k of ["x", "y", "w", "h"]) b[k] = num(b[k], 0.1); b.font_size = num(b.font_size, null); b.ch_from = num(b.ch_from, null); b.ch_to = num(b.ch_to, null); }
+  const pages = [p.page, ...(Array.isArray(p.sheets) ? p.sheets.map(s => s.page) : [])].filter(pg => pg && Array.isArray(pg.blocks));
+  for (const b of pages.flatMap(pg => pg.blocks)) { b.id = safeId(b.id); if (b.data) b.data = safeImage(b.data); for (const k of ["x", "y", "w", "h"]) b[k] = num(b[k], 0.1); b.font_size = num(b.font_size, null); b.ch_from = num(b.ch_from, null); b.ch_to = num(b.ch_to, null); }
   for (const sg of (p.view.corridor && p.view.corridor.stages) || []) sg.colour = safeColour(sg.colour, null) || undefined;
   return p;
 }

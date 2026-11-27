@@ -4,6 +4,7 @@ import { rowsOf } from "./extras.js";
 import { esc, h, $, $$, download, niceDate, tms, clamp, uid, chToM, mToCh, lenFmt, DAY, MON } from "./util.js";
 import { readImage } from "./dialogs.js";
 import { logoSvg, logoWidth } from "./brand.js";
+import { sheetList, withSheet, switchSheet, addSheet, removeSheet, moveSheet } from "./core/model.js";
 
 export const PAPERS = { A4: [297, 210], A3: [420, 297], A2: [594, 420], A1: [841, 594], A0: [1189, 841], Letter: [279, 216], Ledger: [432, 279], "ANSI D": [864, 559] };
 const UNITS_PER_MM = 3.5; // drawing units per millimetre inside placed blocks (sets text size on paper)
@@ -167,6 +168,7 @@ export function pageView(app) {
   function side() {
     const pg = app.p.page, panel = $("#page-side"); panel.innerHTML = "";
     const set = (k, v) => { app.commit(); pg[k] = v; app.changed(false); draw(); };
+    sheetsPanel(panel);
     panel.append(h("h3", {}, "Page setup"),
       lbl("Paper", selEl(Object.keys(PAPERS), pg.paper, v => set("paper", v))),
       lbl("Orientation", selEl(["landscape", "portrait"], pg.orientation, v => set("orientation", v))),
@@ -223,10 +225,28 @@ export function pageView(app) {
     panel.append(h("div", { class: "btns" },
       ...["text", "image", "legend", "titleblock", "chart", "summary", "calendar"].map(k => h("button", { type: "button", onclick: () => { app.commit(); const nb = { id: uid("b"), kind: k, x: .3, y: .3, w: .25, h: .15, text: k === "text" ? "Text" : "", font_size: 11, border: true }; pg.blocks.push(nb); sel = nb.id; app.changed(false); draw(); } }, `Add ${k}`))));
     panel.append(h("h3", {}, "Output"), h("div", { class: "btns" },
-      h("button", { type: "button", class: "primary", onclick: () => printPage(app.p) }, "Print…"),
+      h("button", { type: "button", class: "primary", onclick: () => printPage(app.p) }, sheetList(app.p).length > 1 ? `Print all ${sheetList(app.p).length} sheets…` : "Print…"),
+      sheetList(app.p).length > 1 ? h("button", { type: "button", onclick: () => printPage(app.p, { only: "active" }) }, "Print this sheet…") : null,
       h("button", { type: "button", onclick: () => download(`${slug(app.p.name)}.svg`, renderPage(app.p, { forPrint: true }), "image/svg+xml") }, "Export SVG"),
       h("button", { type: "button", onclick: () => exportPng(app.p) }, "Export PNG")),
-      h("p", { class: "hint" }, "To make a PDF, choose Print and pick “Save as PDF” as the printer. The page size is set from this setup."));
+      h("p", { class: "hint" }, "To make a PDF, choose Print and pick “Save as PDF” as the printer: every sheet goes into the one PDF, one sheet per page. Sheets of different paper sizes print on the first sheet's size. Export SVG / PNG save the sheet shown."));
+  }
+  // Sheets: several page layouts in one project, printed in order. Each sheet's chart blocks can show their own saved
+  // view, so a sheet can hold the whole programme by the week and the next one a possession by the hour.
+  function sheetsPanel(panel) {
+    const p = app.p, list = sheetList(p), cur = list.find(s => s.active), n = list.length;
+    const act = f => { app.commit(); f(); sel = null; app.changed(false); draw(); };
+    const pick = h("select", { onchange: e => act(() => switchSheet(p, e.target.value)) });
+    list.forEach((s, i) => pick.append(h("option", { value: s.id }, `${i + 1}. ${s.name}`))); pick.value = cur.id;
+    panel.append(h("h3", {}, `Sheets (${n})`), lbl("Sheet shown", pick));
+    if (n > 1) panel.append(lbl("Sheet name", h("input", { value: cur.name, onchange: e => act(() => { const s = p.sheets.find(x => x.id === cur.id); if (s) s.name = e.target.value || s.name; }) })));
+    panel.append(h("div", { class: "btns" },
+      h("button", { type: "button", title: "A new sheet after this one, starting as a copy of this layout", onclick: () => act(() => addSheet(p)) }, "New sheet (copy)"),
+      h("button", { type: "button", title: "A new sheet with the default layout", onclick: () => act(() => addSheet(p, null, false)) }, "New blank sheet"),
+      n > 1 ? h("button", { type: "button", onclick: () => act(() => moveSheet(p, cur.id, -1)), disabled: list[0].id === cur.id }, "Move up") : null,
+      n > 1 ? h("button", { type: "button", onclick: () => act(() => moveSheet(p, cur.id, 1)), disabled: list[n - 1].id === cur.id }, "Move down") : null,
+      n > 1 ? h("button", { type: "button", class: "danger", onclick: () => act(() => removeSheet(p, cur.id)) }, "Delete sheet") : null));
+    if (n > 1) panel.append(h("p", { class: "hint" }, "Each chart block can show a saved view (Chart → Saved views), so each sheet can have its own dates and timescale, down to the hour."));
   }
   function pt(e) { const svg = $("#page-canvas svg"), r = svg.getBoundingClientRect(), [W, H] = paperSize(app.p.page); return { x: (e.clientX - r.left) / r.width * W, y: (e.clientY - r.top) / r.height * H }; }
   root.addEventListener("pointerdown", e => {
@@ -262,14 +282,19 @@ const selEl = (opts, v, on) => { const s = h("select", { onchange: e => on(e.tar
 const numEl = (v, on) => h("input", { type: "number", step: "any", value: v, onchange: e => { const n = parseFloat(e.target.value); if (!isNaN(n)) on(n); } });
 const slug = s => String(s).replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "") || "time_chainage";
 
-export function printPage(p) {
-  const [W, H] = paperSize(p.page);
+export function printPage(p, { only = null } = {}) {
+  const sheets = sheetList(p).filter(s => only !== "active" || s.active);
+  const [W, H] = paperSize(sheets[0].page);
   let st = $("#print-page-size");
   if (!st) { st = h("style", { id: "print-page-size" }); document.head.append(st); }
   st.textContent = `@page { size: ${W}mm ${H}mm; margin: 0; }`;
   const pr = $("#print-root");
-  pr.innerHTML = renderPage(p, { forPrint: true });
+  pr.innerHTML = printSheets(p, sheets);
   window.print();
+}
+// Every sheet as its own page, in order (one SVG per sheet, a page break after each).
+export function printSheets(p, sheets = sheetList(p)) {
+  return sheets.map(s => `<div class="print-sheet">${renderPage(withSheet(p, s), { forPrint: true })}</div>`).join("");
 }
 
 export async function exportPng(p, dpi = 200) {
@@ -289,7 +314,8 @@ export async function exportPng(p, dpi = 200) {
 export function chartProject(p, b) {
   if (b.ch_from == null && b.ch_to == null && !b.dataset && !b.no_bands && !b.no_side && !b.view_id) return p;
   const v = b.view_id ? (p.views || []).find(x => x.id === b.view_id) : null;
-  if (v) p = { ...p, time: { ...p.time, start: (v.t_from || p.time.start).slice(0, 10), finish: (v.t_to || p.time.finish).slice(0, 10), orientation: v.orientation || p.time.orientation },
+  // a view framed to the hour ("…T04:30") keeps its hours here, so each sheet can have its own timescale
+  if (v) p = { ...p, time: { ...p.time, start: v.t_from || p.time.start, finish: v.t_to || p.time.finish, orientation: v.orientation || p.time.orientation },
     view: { ...p.view, hidden_styles: v.hidden_styles || [] } };
   let c = { ...p.chainage, start_m: b.ch_from ?? v?.ch_from ?? p.chainage.start_m, end_m: b.ch_to ?? v?.ch_to ?? p.chainage.end_m };
   if (!(c.end_m > c.start_m)) c = p.chainage;
