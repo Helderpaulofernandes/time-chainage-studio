@@ -99,7 +99,18 @@ h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; margin-t
 #chart .act { cursor: move; } #chart [data-h] { cursor: grab; } #chart .mk, #chart .loc { cursor: pointer; }
 #page-view:not([hidden]) { display: grid; grid-template-columns: minmax(0, 1fr) 270px; }
 #page-canvas { overflow: auto; display: flex; background: var(--faint); padding: 20px; }
-#page-canvas svg { margin: auto; flex: none; }
+#page-canvas { flex-direction: column; gap: 26px; padding-top: 0; }
+#page-canvas .sheet-tabs { position: sticky; top: 0; z-index: 3; align-self: stretch; display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 0 6px; margin: 0 -20px; padding-left: 20px; padding-right: 20px; background: var(--faint); border-bottom: 1px solid var(--rule); }
+#page-canvas .sheet-tab { font: inherit; font-size: 12px; padding: 4px 10px; border: 1px solid var(--rule); border-radius: 4px 4px 0 0; background: #fff; color: #18262B; cursor: pointer; }
+#page-canvas .sheet-tab.inview { box-shadow: inset 0 -3px 0 #E0A400; }
+#page-canvas .sheet-tab.active { background: #18262B; color: #fff; border-color: #18262B; }
+#page-canvas .sheet-tab.add { font-weight: 700; padding: 4px 9px; }
+#page-canvas .page-sheet { margin: auto; flex: none; }
+#page-canvas svg { display: block; }
+#page-canvas .sheet-tag { font-size: 12px; font-weight: 600; color: var(--muted, #5D6B70); margin: 0 0 5px 2px; }
+#page-canvas.many .page-sheet:not(.active) { cursor: pointer; opacity: .92; }
+#page-canvas.many .page-sheet.active svg { outline: 3px solid #E0A400; outline-offset: 2px; }
+#page-canvas.many .page-sheet.active .sheet-tag { color: #18262B; }
 #page-canvas svg { box-shadow: 0 4px 22px rgba(0,0,0,.22); background: #fff; }
 #page-side { border-left: 1px solid var(--rule); background: var(--sheet); padding: 10px 12px; overflow: auto; display: grid; gap: 8px; align-content: start; }
 .panel { border-left: 1px solid var(--rule); background: var(--sheet); display: grid; grid-template-rows: auto 1fr; min-height: 0; }
