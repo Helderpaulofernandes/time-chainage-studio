@@ -189,3 +189,15 @@ test("sheets: several page layouts in one project survive saving, undo snapshots
   const two = project(3); M.addSheet(two, "y"); two.sheets.forEach(s => (s.page = null)); M.normalise(two);
   assert.equal(two.sheets.filter(s => !s.page).length, 1);
 });
+
+test("an hour-scale chart has an hour ruler and day labels; a weekly chart keeps its weeks", () => {
+  const p = project(10);
+  p.time.start = "2027-03-02T04:30"; p.time.finish = "2027-03-05T08:30";
+  const svg = R.renderChart(p, { width: 1200, height: 1200 }).svg;
+  assert.ok(svg.includes("06:00") && svg.includes("12:00"), "hours are labelled");
+  assert.ok(/>Tue 2</.test(svg) && />Wed 3</.test(svg), "days are labelled");
+  assert.ok(!/>W\d+</.test(svg), "no week numbers at hour scale");
+  assert.ok(!/NaN|undefined|Infinity/.test(svg));
+  const wk = R.renderChart(project(10), { width: 1200 }).svg;
+  assert.ok(/>W\d+</.test(wk) && !wk.includes(">06:00<"), "weekly charts unchanged");
+});
