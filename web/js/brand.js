@@ -3,7 +3,10 @@
 import { esc, uid } from "./util.js";
 
 const KEY = "tcs-brands";
-export const BRAND_DEFAULTS = { name: "", tagline: "", logo: null, logo_w: 0, logo_h: 0, colour: "#18262B", accent: "#C00000" };
+export const BRAND_DEFAULTS = { name: "", tagline: "", logo: null, logo_w: 0, logo_h: 0, colour: "#18262B", accent: "#C00000", font: "" };
+// Fonts for page furniture (title, title block, notes). Montserrat ships with the app (web/fonts, SIL OFL) so a
+// printed sheet looks the same on any computer; "" keeps the chart font.
+export const BRAND_FONTS = [["", "Chart font (IBM Plex Sans Condensed)"], ["Montserrat", "Montserrat (bundled with the app)"], ["Arial", "Arial"], ["Calibri", "Calibri (if installed)"]];
 
 export function listBrands() {
   try { const v = JSON.parse(localStorage.getItem(KEY) || "[]"); return Array.isArray(v) ? v : []; } catch (e) { return []; }

@@ -59,6 +59,7 @@ The server's own REST API (http://localhost:8765/docs) is **older than the app**
 | Resource histogram beside the chart (from P6 assignments or pasted), with weekly and running totals | done |
 | Page layout: summary and calendar blocks, several charts per sheet (each with its own stretch and option), scale note | done |
 | Sheets: several page layouts in one project, shown one under the other in Page layout with tabs to jump between them, printed in order into one PDF; each sheet's charts can use their own saved view, so a programme sheet can be by the week and a possession sheet by the hour | done |
+| Brand page font: page furniture (title, title block, notes) can use the brand colour and a page font; Montserrat ships with the app (SIL OFL) so sheets print the same anywhere; logos keep one logo-height of clear space in the title block | done |
 | Saved views framed to the hour (From / To with a time); a date-only "to" still includes that whole day | done |
 | Microsoft Project XML import (custom fields, styles from task names, links); rate sheet to a sketch data set; links in XER export and Excel import | done |
 | Feature list and what is left: [docs/ROADMAP.md](docs/ROADMAP.md) | |

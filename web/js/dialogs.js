@@ -1,7 +1,7 @@
 // Modal dialogs: project setup, open, imports, P6 field mapping and sync, productivities.
 import { api } from "./api.js";
 import { corridorLanes, STAGE_COLOURS } from "./corridor.js";
-import { listBrands, saveBrand, deleteBrand, projectCopy, readLogo, onColour, BRAND_DEFAULTS } from "./brand.js";
+import { listBrands, saveBrand, deleteBrand, projectCopy, readLogo, onColour, BRAND_DEFAULTS, BRAND_FONTS } from "./brand.js";
 import { h, esc, $, $$, chFmt, chToM, mToCh, uid, tms, niceDate, niceFinish, unitFactor, setDateOrder, chIsStation, field } from "./util.js";
 
 // ------------------------------------------------------------------ modal framework
@@ -550,6 +550,8 @@ export function brandDialog(app) {
       h("div", { class: "row2" },
         field("Brand colour (title strip, intro text)", h("input", { type: "color", value: b.colour || BRAND_DEFAULTS.colour, oninput: e => upd("colour", e.target.value) })),
         field("Accent colour", h("input", { type: "color", value: b.accent || BRAND_DEFAULTS.accent, oninput: e => upd("accent", e.target.value) }))),
+      field("Page font (title, title block, notes; charts keep their own font)", (() => { const sl = h("select", { onchange: e => upd("font", e.target.value) }); BRAND_FONTS.forEach(([v, n]) => sl.append(h("option", { value: v }, n))); sl.value = b.font || ""; return sl; })(),
+        "Brand colour colours the page text and rules; with a page font set, title-block captions take the accent colour."),
       h("div", { id: "bd-prev", class: "brand-prev" }),
       h("label", { class: "chk" }, h("input", { type: "checkbox", checked: !!b.is_default, onchange: e => { work.forEach(x => (x.is_default = false)); b.is_default = e.target.checked; fillPick(); } }),
         " Use this brand for new and imported projects"),
