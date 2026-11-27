@@ -147,21 +147,43 @@ export function pageView(app) {
   const root = $("#page-view");
   let sel = null, drag = null, zoom = 1; // zoom 1 = whole sheet fits the window
   // size the sheet on screen; keep the point under the cursor (or the centre) still when zooming
+  // every sheet is drawn, one under the other, so the pages scroll like a PDF; the active sheet is the one edited
+  const activeSvg = () => $("#page-canvas .page-sheet.active > svg");
   function size(anchor) {
-    const [W, H] = paperSize(app.p.page), area = $("#page-canvas"), svg = area.querySelector("svg"); if (!svg) return;
+    const [W, H] = paperSize(app.p.page), area = $("#page-canvas"), svg = activeSvg(); if (!svg) return;
     const r0 = svg.getBoundingClientRect(), a = area.getBoundingClientRect();
     const cx = anchor ? anchor.clientX : a.left + a.width / 2, cy = anchor ? anchor.clientY : a.top + a.height / 2;
     const fx = r0.width ? (cx - r0.left) / r0.width : .5, fy = r0.height ? (cy - r0.top) / r0.height : .5;
     const fit = Math.max(0.05, Math.min((area.clientWidth - 40) / W, (area.clientHeight - 40) / H)) * zoom;
-    svg.setAttribute("width", (W * fit).toFixed(0)); svg.setAttribute("height", (H * fit).toFixed(0));
+    for (const sv of area.querySelectorAll(".page-sheet > svg")) { // each sheet at the same scale (mm to pixels)
+      const [w, hh] = sv.getAttribute("viewBox").split(" ").slice(2).map(Number);
+      sv.setAttribute("width", (w * fit).toFixed(0)); sv.setAttribute("height", (hh * fit).toFixed(0));
+    }
     if (anchor !== undefined) { const r1 = svg.getBoundingClientRect(); area.scrollLeft += r1.left + fx * r1.width - cx; area.scrollTop += r1.top + fy * r1.height - cy; }
     const st = $("#st-cursor"); if (st && app.view === "page") st.textContent = `Page zoom ${Math.round(zoom * 100)}%`;
   }
   function draw() {
-    const area = $("#page-canvas"), sl = area.scrollLeft, stp = area.scrollTop;
-    area.innerHTML = renderPage(app.p, { selected: sel });
+    const area = $("#page-canvas"), sl = area.scrollLeft, stp = area.scrollTop, list = sheetList(app.p), many = list.length > 1;
+    area.classList.toggle("many", many);
+    const tabs = `<div class="sheet-tabs" role="tablist">` + list.map((s, i) => `<button type="button" role="tab" class="sheet-tab${s.active ? " active" : ""}" data-tab="${esc(s.id)}" aria-selected="${s.active}">${i + 1}. ${esc(s.name)}</button>`).join("")
+      + `<button type="button" class="sheet-tab add" data-tab-add="1" title="New sheet: a copy of the one being edited">+</button></div>`;
+    area.innerHTML = tabs + list.map((s, i) => `<div class="page-sheet${s.active ? " active" : ""}" data-sheet="${esc(s.id)}">`
+      + (many ? `<div class="sheet-tag">${i + 1}. ${esc(s.name)}${s.active ? "" : " · click to edit"}</div>` : "")
+      // other sheets draw as printed (no guides or handles); only the active one can be edited
+      + renderPage(withSheet(app.p, s), s.active ? { selected: sel } : { forPrint: true }) + `</div>`).join("");
     size(); area.scrollLeft = sl; area.scrollTop = stp;
-    side();
+    side(); trackScroll();
+  }
+  // the tab of the sheet most in view is underlined while scrolling; the edited sheet's tab stays filled
+  function trackScroll() {
+    const area = $("#page-canvas"), top = area.getBoundingClientRect().top + 60; let best = null, bd = Infinity;
+    for (const el of area.querySelectorAll(".page-sheet")) { const r = el.getBoundingClientRect(), d = r.top <= top && r.bottom > top ? 0 : Math.abs(r.top - top); if (d < bd) { bd = d; best = el.dataset.sheet; } }
+    for (const t of area.querySelectorAll(".sheet-tab[data-tab]")) t.classList.toggle("inview", t.dataset.tab === best);
+  }
+  $("#page-canvas").addEventListener("scroll", () => requestAnimationFrame(trackScroll), { passive: true });
+  function showActive() {
+    const area = $("#page-canvas"), el = $("#page-canvas .page-sheet.active"), bar = $("#page-canvas .sheet-tabs");
+    if (el && $$("#page-canvas .page-sheet").length > 1) area.scrollTo({ top: area.scrollTop + el.getBoundingClientRect().top - area.getBoundingClientRect().top - (bar ? bar.offsetHeight : 0) - 8, behavior: "smooth" });
   }
   function zoomBy(f, e) { const z = clamp(zoom * f, 0.25, 10); if (z === zoom) return; zoom = z; size(e || null); }
   function fit() { zoom = 1; size(); }
@@ -235,7 +257,7 @@ export function pageView(app) {
   // view, so a sheet can hold the whole programme by the week and the next one a possession by the hour.
   function sheetsPanel(panel) {
     const p = app.p, list = sheetList(p), cur = list.find(s => s.active), n = list.length;
-    const act = f => { app.commit(); f(); sel = null; app.changed(false); draw(); };
+    const act = f => { app.commit(); f(); sel = null; app.changed(false); draw(); showActive(); };
     const pick = h("select", { onchange: e => act(() => switchSheet(p, e.target.value)) });
     list.forEach((s, i) => pick.append(h("option", { value: s.id }, `${i + 1}. ${s.name}`))); pick.value = cur.id;
     panel.append(h("h3", {}, `Sheets (${n})`), lbl("Sheet shown", pick));
@@ -248,8 +270,19 @@ export function pageView(app) {
       n > 1 ? h("button", { type: "button", class: "danger", onclick: () => act(() => removeSheet(p, cur.id)) }, "Delete sheet") : null));
     if (n > 1) panel.append(h("p", { class: "hint" }, "Each chart block can show a saved view (Chart → Saved views), so each sheet can have its own dates and timescale, down to the hour."));
   }
-  function pt(e) { const svg = $("#page-canvas svg"), r = svg.getBoundingClientRect(), [W, H] = paperSize(app.p.page); return { x: (e.clientX - r.left) / r.width * W, y: (e.clientY - r.top) / r.height * H }; }
+  function pt(e) { const svg = activeSvg(), r = svg.getBoundingClientRect(), [W, H] = paperSize(app.p.page); return { x: (e.clientX - r.left) / r.width * W, y: (e.clientY - r.top) / r.height * H }; }
   root.addEventListener("pointerdown", e => {
+    const tab = e.target.closest(".sheet-tab");
+    if (tab) { // tabs: jump to a sheet (and edit it), or add one
+      app.commit(); if (tab.dataset.tabAdd) addSheet(app.p); else switchSheet(app.p, tab.dataset.tab);
+      sel = null; app.changed(false); draw(); showActive(); return;
+    }
+    const sh = e.target.closest(".page-sheet");
+    if (sh && !sh.classList.contains("active")) { // a click on another sheet makes it the one edited
+      const y0 = sh.getBoundingClientRect().top; switchSheet(app.p, sh.dataset.sheet); sel = null; app.changed(false); draw();
+      const nw = $(`#page-canvas .page-sheet[data-sheet="${CSS.escape(sh.dataset.sheet)}"]`); if (nw) $("#page-canvas").scrollTop += nw.getBoundingClientRect().top - y0;
+      return;
+    }
     const rs = e.target.closest("[data-resize]"), bl = e.target.closest("[data-block]");
     if (!rs && !bl) { if (e.target.closest("#page-canvas")) { sel = null; draw(); } return; }
     const id = (rs || bl).dataset.resize || (rs || bl).dataset.block, b = app.p.page.blocks.find(x => x.id === id);
@@ -263,7 +296,7 @@ export function pageView(app) {
     if (drag.mode === "move") { b.x = snap(clamp(o.x + dx, 0, 1 - b.w)); b.y = snap(clamp(o.y + dy, 0, 1 - b.h)); }
     else { b.w = snap(clamp(o.w + dx, .03, 1 - b.x)); b.h = snap(clamp(o.h + dy, .03, 1 - b.y)); }
     // move the block's drawing (or its outline when resizing) instead of redrawing the whole page on every mouse move
-    const svg = $("#page-canvas svg"), g = svg && svg.querySelector(`g[data-block="${b.id}"]`);
+    const svg = activeSvg(), g = svg && svg.querySelector(`g[data-block="${b.id}"]`);
     if (!g) return draw();
     if (drag.mode === "move") g.setAttribute("transform", `translate(${((b.x - o.x) * AW).toFixed(2)},${((b.y - o.y) * AH).toFixed(2)})`);
     else {
