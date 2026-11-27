@@ -1,6 +1,6 @@
 // Time-chainage drawing engine. Produces SVG markup for the screen and for the printed page.
 // Chainage runs across, time runs down (or up). Everything is placed through one geometry object.
-import { DAY, MON, tms, esc, chFmt, chUnitLabel, lenFmt, isoWeek, labelText, niceDate, niceFinish } from "./util.js";
+import { DAY, MON, DOW, tms, esc, chFmt, chUnitLabel, lenFmt, isoWeek, labelText, niceDate, niceFinish } from "./util.js";
 import { timeEndMs } from "./core/model.js";
 import { bandHeight, bandsSvg, sideColsSvg, resourcesSvg, overlaysSvg, headerPinsSvg, onChart, actGeo } from "./extras.js";
 
@@ -221,7 +221,24 @@ export function renderChart(p, opts = {}) {
   if (p.time.shade_weekends && G.ppd >= 4) {
     for (let d = t0; d < t1; d += DAY) { const wd = new Date(d).getUTCDay(); if (wd === 0 || wd === 6) o += `<rect x="${L}" y="${Math.min(Y(d), Y(d + DAY))}" width="${R - L}" height="${G.ppd}" fill="${PAPER.faint}"/>`; }
   }
-  if (G.ppd >= 10) for (let d = t0; d <= t1; d += DAY) o += `<line x1="${L}" x2="${R}" y1="${Y(d)}" y2="${Y(d)}" stroke="${PAPER.rule}" stroke-width=".3"/>`;
+  // hour scale (a possession sheet, say): an hour ruler in the period column and days in the month column
+  const hourMode = G.ppd >= 40, d0 = Math.floor(t0 / DAY) * DAY;
+  if (hourMode) {
+    const pxh = G.ppd / 24, hstep = [1, 2, 3, 4, 6, 12].find(h => pxh * h >= 13) || 24, mstep = pxh >= 160 ? 15 : pxh >= 60 ? 30 : 0;
+    if (mstep) for (let t = Math.ceil(t0 / 6e4 / mstep) * mstep * 6e4; t <= t1; t += mstep * 6e4) if (t % 36e5) o += `<line x1="${L}" x2="${R}" y1="${Y(t)}" y2="${Y(t)}" stroke="${PAPER.rule}" stroke-width=".25" stroke-dasharray="2 3"/>`;
+    for (let t = Math.ceil(t0 / 36e5) * 36e5; t <= t1; t += 36e5) {
+      const hr = new Date(t).getUTCHours(), major = hr % hstep === 0;
+      if (t % DAY) o += `<line x1="${L}" x2="${R}" y1="${Y(t)}" y2="${Y(t)}" stroke="${PAPER.rule}" stroke-width="${major ? 0.6 : 0.3}"/>`;
+      // ruler ticks either side of the grid, labels in the period column
+      for (const [x, dir] of [[L, -1], [R, 1]]) o += `<line x1="${x}" x2="${x + dir * (major ? 6 : 3)}" y1="${Y(t)}" y2="${Y(t)}" stroke="${PAPER.muted}" stroke-width=".8"/>`;
+      if (major && Math.abs(Y(Math.min(t + hstep * 36e5, t1)) - Y(t)) >= 9 || (major && t + 36e5 > t1)) {
+        const lab = String(hr).padStart(2, "0") + ":00", xs0 = G.xs;
+        if (xs0.perR != null) o += T(xs0.perR, Y(t) + 3.5, lab, `font-size="${fs - 2}" font-family="${MONO}"`, `fill:${PAPER.ink}`);
+        if (xs0.perL != null) o += T(xs0.perL, Y(t) + 3.5, lab, `text-anchor="end" font-size="${fs - 2}" font-family="${MONO}"`, `fill:${PAPER.ink}`);
+      }
+    }
+    for (let d = d0 + DAY; d < t1; d += DAY) if (d > t0) o += `<line x1="${G.xs.monL != null ? L - 8 : L}" x2="${G.xs.monR != null ? R + 8 : R}" y1="${Y(d)}" y2="${Y(d)}" stroke="${PAPER.muted}" stroke-width="1.1"/>`;
+  } else if (G.ppd >= 10) for (let d = t0; d <= t1; d += DAY) o += `<line x1="${L}" x2="${R}" y1="${Y(d)}" y2="${Y(d)}" stroke="${PAPER.rule}" stroke-width=".3"/>`;
   const wk0 = (() => { const d = new Date(t0); const back = (d.getUTCDay() - (p.time.week_start ?? 1) + 7) % 7; return t0 - back * DAY; })();
   const wstep = G.ppd * 7 >= 13 ? 1 : G.ppd * 7 >= 6 ? 2 : G.ppd * 7 >= 3 ? 4 : 8;
   // period column: week numbers (project, ISO or week-start dates), months since the start, or project years
@@ -233,12 +250,12 @@ export function renderChart(p, opts = {}) {
   for (let d = wk0; d <= t1; d += 7 * DAY, wn++) {
     if (d < t0) continue;
     o += `<line x1="${L}" x2="${R}" y1="${Y(d)}" y2="${Y(d)}" stroke="${PAPER.rule}" stroke-width="${G.ppd * 7 >= 6 ? 0.5 : 0.3}"/>`;
-    if (per === "weeks" && wn % wstep === 0 && d + 7 * DAY <= t1 + DAY) {
+    if (per === "weeks" && !hourMode && wn % wstep === 0 && d + 7 * DAY <= t1 + DAY) {
       const lab = p.time.week_labels === "iso" ? "W" + isoWeek(d) : p.time.week_labels === "date" ? niceDate(d, false) : "W" + (Math.floor((d - wk0) / (7 * DAY)) + 1);
       perAt((Y(d) + Y(d + 7 * DAY)) / 2 + 3, lab);
     }
   }
-  if (per === "months" || per === "years") {
+  if (!hourMode && (per === "months" || per === "years")) {
     const od = new Date(origin);
     for (let n = 0; n < 1200; n++) {
       const a = per === "years" ? Date.UTC(od.getUTCFullYear() + n, od.getUTCMonth(), od.getUTCDate()) : Date.UTC(od.getUTCFullYear(), od.getUTCMonth() + n, od.getUTCDate());
@@ -251,7 +268,15 @@ export function renderChart(p, opts = {}) {
   }
   const sd = new Date(t0); let m = Date.UTC(sd.getUTCFullYear(), sd.getUTCMonth(), 1), first = true;
   const monAt = (x, anchor, y, s, attrs) => { if (x != null) o += T(x, y, s, `text-anchor="${anchor}" ${attrs}`, `fill:${attrs.includes(MONO) ? PAPER.muted : PAPER.ink}`); };
-  while (m < t1) {
+  // hour scale: each day labelled at its start (day, date, month and year) instead of the months
+  if (hourMode) for (let d = d0; d < t1; d += DAY) {
+    const a = Math.max(d, t0), b = Math.min(d + DAY, t1), ya0 = Math.min(Y(a), Y(b)), dt = new Date(d);
+    if (Math.abs(Y(b) - Y(a)) < 24) continue;
+    const ma = `font-size="${fs}" font-weight="600" font-family="${FONT}"`, sm = `font-size="${fs - 2}" font-family="${MONO}"`;
+    monAt(G.xs.monL, "end", ya0 + 12, `${DOW[dt.getUTCDay()]} ${dt.getUTCDate()}`, ma); monAt(G.xs.monR, "start", ya0 + 12, `${DOW[dt.getUTCDay()]} ${dt.getUTCDate()}`, ma);
+    monAt(G.xs.monL, "end", ya0 + 23, `${MON[dt.getUTCMonth()]} ${String(dt.getUTCFullYear()).slice(2)}`, sm); monAt(G.xs.monR, "start", ya0 + 23, `${MON[dt.getUTCMonth()]} ${String(dt.getUTCFullYear()).slice(2)}`, sm);
+  }
+  while (!hourMode && m < t1) {
     const dt = new Date(m), next = Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth() + 1, 1);
     if (m >= t0) o += `<line x1="${xs.monL != null ? L - 8 : L}" x2="${xs.monR != null ? R + 8 : R}" y1="${Y(m)}" y2="${Y(m)}" stroke="${PAPER.muted}" stroke-opacity=".55" stroke-width="1"/>`;
     const a = Math.max(m, t0), b = Math.min(next, t1), span = Math.abs(Y(b) - Y(a)), ym = Math.min(Y(a), Y(b));
