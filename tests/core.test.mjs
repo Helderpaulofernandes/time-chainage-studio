@@ -140,3 +140,52 @@ test("MS Project update matches tasks by unique ID and keeps what was set in the
   const dig = p.activities.find(a => a.ms.uid === "7");
   assert.deepEqual([dig.code, dig.start, dig.crew, dig.label.show], ["2", "2026-03-03T08:00", "Crew 1", false]);
 });
+
+test("saved views and sheets can frame a chart to the hour; a date-only finish still includes the whole day", async () => {
+  const PG = await import("../web/js/page.js");
+  const p = project(10);
+  const day = R.geometry(p, { width: 1200 });
+  assert.equal(day.t1 - day.t0, M.parseT("2028-06-30") + 864e5 - M.parseT("2027-01-01"), "date-only finish draws that whole day");
+  p.views = [{ id: "v1", name: "P2", t_from: "2027-03-02T04:30", t_to: "2027-03-05T08:30", hidden_styles: [] }];
+  M.normalise(p);
+  const q = PG.chartProject(p, { kind: "chart", view_id: "v1" });
+  assert.equal(q.time.start, "2027-03-02T04:30");
+  const g = R.geometry(q, { width: 1200, height: 900 });
+  assert.equal(g.t0, M.parseT("2027-03-02T04:30"));
+  assert.equal(g.t1, M.parseT("2027-03-05T08:30"), "an exact finish is not stretched by a day");
+  const svg = R.renderChart(q, { width: 1200, height: 900 }).svg;
+  assert.ok(!/NaN|undefined|Infinity/.test(svg));
+  // a crafted time in a view file is dropped, not drawn
+  p.views.push({ id: "v2", name: "bad", t_from: "<script>", t_to: "2027-01-01" }); M.normalise(p);
+  assert.equal(p.views[1].t_from, null);
+});
+
+test("sheets: several page layouts in one project survive saving, undo snapshots and sanitising", () => {
+  const p = project(5);
+  assert.equal(M.sheetList(p).length, 1, "old projects are one sheet");
+  assert.ok(!("sheets" in p));
+  const first = p.page;
+  M.addSheet(p, "Possession 1"); p.page.blocks[0].text = "P1 title";
+  M.addSheet(p, "Possession 2", false);
+  assert.deepEqual(M.sheetList(p).map(s => s.name + (s.active ? "*" : "")), ["Sheet 1", "Possession 1", "Possession 2*"]);
+  M.switchSheet(p, "sh1");
+  assert.equal(p.page, first, "the active sheet's layout is always p.page");
+  // a saved file (or an undo snapshot) holds one copy of each layout and comes back the same
+  const back = M.normalise(JSON.parse(JSON.stringify(p)));
+  assert.deepEqual(M.sheetList(back).map(s => s.name + (s.active ? "*" : "")), ["Sheet 1*", "Possession 1", "Possession 2"]);
+  assert.equal(M.sheetList(back)[1].page.blocks[0].text, "P1 title");
+  M.moveSheet(back, "sh3", -1);
+  assert.deepEqual(M.sheetList(back).map(s => s.name), ["Sheet 1", "Possession 2", "Possession 1"]);
+  M.removeSheet(back, "sh1");
+  assert.equal(M.sheetList(back).filter(s => s.active).length, 1, "deleting the sheet shown makes another one active");
+  M.removeSheet(back, M.sheetList(back)[0].id);
+  assert.ok(!("sheets" in back), "down to one sheet: back to the plain single-page form");
+  // block ids on every sheet are sanitised, not just the one shown
+  const bad = project(3); M.addSheet(bad, "x"); M.switchSheet(bad, "sh1");
+  bad.sheets[1].page.blocks[0].id = '"><script>alert(1)</script>';
+  M.normalise(bad);
+  assert.ok(!/[<>"]/.test(bad.sheets[1].page.blocks[0].id));
+  // a file with two entries both marked active gets one active sheet and a copy for the other
+  const two = project(3); M.addSheet(two, "y"); two.sheets.forEach(s => (s.page = null)); M.normalise(two);
+  assert.equal(two.sheets.filter(s => !s.page).length, 1);
+});

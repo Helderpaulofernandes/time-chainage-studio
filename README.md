@@ -58,6 +58,8 @@ The server's own REST API (http://localhost:8765/docs) is **older than the app**
 | Bands above and below the chart: long section with cut / fill, quantities by section, package extents, schematic plan, strips | done |
 | Resource histogram beside the chart (from P6 assignments or pasted), with weekly and running totals | done |
 | Page layout: summary and calendar blocks, several charts per sheet (each with its own stretch and option), scale note | done |
+| Sheets: several page layouts in one project, printed in order into one PDF; each sheet's charts can use their own saved view, so a programme sheet can be by the week and a possession sheet by the hour | done |
+| Saved views framed to the hour (From / To with a time); a date-only "to" still includes that whole day | done |
 | Microsoft Project XML import (custom fields, styles from task names, links); rate sheet to a sketch data set; links in XER export and Excel import | done |
 | Feature list and what is left: [docs/ROADMAP.md](docs/ROADMAP.md) | |
 | Live P6 connection (EPPM web services, Primavera Cloud REST, P6 Pro database) | next phase |

@@ -9,7 +9,7 @@ const chAttrs = (p, extra = {}) => (chIsStation(p) ? { type: "text", inputmode: 
 const chName = p => (chIsStation(p) ? "station" : `chainage (${p.chainage.unit})`);
 import * as D from "./dialogs.js";
 import * as PN from "./panels.js";
-import { newProject } from "./core/model.js";
+import { newProject, timeEndMs } from "./core/model.js";
 import { defaultBrand, projectCopy } from "./brand.js";
 import { pageView, printPage, exportPng, renderPage } from "./page.js";
 
@@ -732,8 +732,8 @@ function openVideo() {
 }
 function playRange() {
   const p = app.p, acts = p.activities.filter(a => a.dataset === p.view.main_dataset);
-  const s = acts.length ? Math.min(...acts.map(a => tms(a.start))) : tms(p.time.start), f = acts.length ? Math.max(...acts.map(a => tms(a.finish))) : tms(p.time.finish) + DAY;
-  play.t0 = Math.max(tms(p.time.start), s - 7 * DAY); play.t1 = Math.min(tms(p.time.finish) + DAY, f + 7 * DAY);
+  const s = acts.length ? Math.min(...acts.map(a => tms(a.start))) : tms(p.time.start), f = acts.length ? Math.max(...acts.map(a => tms(a.finish))) : timeEndMs(p.time.finish);
+  play.t0 = Math.max(tms(p.time.start), s - 7 * DAY); play.t1 = Math.min(timeEndMs(p.time.finish), f + 7 * DAY);
 }
 function playOpen() {
   if (app.view !== "chart") setView("chart");

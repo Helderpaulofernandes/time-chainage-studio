@@ -3,7 +3,7 @@
 import { h, $, uid, tms, tstr, dstr, chToM, mToCh, chFmt, chName, niceDate, DAY, field } from "./util.js";
 import { modal } from "./dialogs.js";
 import { BAND_KINDS, PALETTE, rowsOf, weekStart } from "./extras.js";
-import { makeActivity, makeStyle, newId } from "./core/model.js";
+import { makeActivity, makeStyle, newId, hasTime, timeEndMs } from "./core/model.js";
 import * as XER from "./core/xer.js";
 import * as MSP from "./core/mspdi.js";
 
@@ -339,6 +339,14 @@ export function msProjectDialog(app) {
 }
 
 // ------------------------------------------------------------------ saved views
+// Views hold "YYYY-MM-DD" (whole days, the "to" day included) or "YYYY-MM-DDTHH:MM" (exact). The dialog edits them as
+// date-and-time: a whole-day "to" shows as 00:00 on the next day, and 00:00 typed in goes back to a whole day.
+function viewInput(t, isTo = false) { if (!t) return ""; if (hasTime(t)) return t.slice(0, 16); return isTo ? tstr(timeEndMs(t)) : t + "T00:00"; }
+function viewValue(val, isTo = false) {
+  if (!val) return null; const t = val.slice(0, 16);
+  if (t.endsWith("T00:00")) return isTo ? dstr(tms(t) - DAY) : t.slice(0, 10);
+  return t;
+}
 // A view is a named stretch of chainage and dates, with some styles hidden (TurboChart calls these charts).
 export function currentView(p, name) {
   return { id: uid("v_"), name, ch_from: p.chainage.start_m, ch_to: p.chainage.end_m, t_from: p.time.start, t_to: p.time.finish,
@@ -346,7 +354,9 @@ export function currentView(p, name) {
 }
 export function applyView(p, v) {
   if (v.ch_from != null && v.ch_to != null && v.ch_to > v.ch_from) Object.assign(p.chainage, { start_m: v.ch_from, end_m: v.ch_to });
-  if (v.t_from && v.t_to && v.t_to > v.t_from) Object.assign(p.time, { start: v.t_from.slice(0, 10), finish: v.t_to.slice(0, 10) });
+  // on screen the chart works in whole days: a view framed to the hour opens on the days that hold it
+  // (sheets that use the view keep the exact hours)
+  if (v.t_from && v.t_to && v.t_to > v.t_from) Object.assign(p.time, { start: v.t_from.slice(0, 10), finish: hasTime(v.t_to) ? dstr(timeEndMs(v.t_to) - 60000) : v.t_to.slice(0, 10) });
   if (v.orientation) p.time.orientation = v.orientation;
   p.view.hidden_styles = [...(v.hidden_styles || [])];
   if (v.dataset && p.datasets.some(d => d.id === v.dataset)) p.view.main_dataset = v.dataset;
@@ -366,14 +376,16 @@ export function viewsDialog(app) {
           h("tbody", {}, ...views.map((v, i) => h("tr", {},
             h("td", {}, h("input", { value: v.name, onchange: e => { app.commit(); v.name = e.target.value; app.changed(false); } })),
             h("td", {}, `${chFmt(p, v.ch_from)} – ${chFmt(p, v.ch_to)}`),
-            h("td", {}, `${niceDate(tms(v.t_from))} – ${niceDate(tms(v.t_to))}`),
+            h("td", {}, h("div", { class: "row2" },
+              h("input", { type: "datetime-local", title: "From (date, or date and time to frame a sheet to the hour)", value: viewInput(v.t_from), onchange: e => { app.commit(); v.t_from = viewValue(e.target.value) || v.t_from; app.changed(false); draw(); } }),
+              h("input", { type: "datetime-local", title: "To (a time of 00:00 means the start of that day)", value: viewInput(v.t_to, true), onchange: e => { app.commit(); v.t_to = viewValue(e.target.value, true) || v.t_to; app.changed(false); draw(); } }))),
             h("td", {}, String((v.hidden_styles || []).length)),
             h("td", {}, h("div", { class: "btns" },
               h("button", { type: "button", class: "small primary", onclick: () => { app.commit(); applyView(p, v); app.changed(); draw(); app.toast(`Showing "${v.name}"`); } }, p.view.current_view === v.id ? "Showing" : "Show"),
               h("button", { type: "button", class: "small", onclick: () => { app.commit(); Object.assign(v, { ...currentView(p, v.name), id: v.id }); app.changed(false); draw(); } }, "Update to what's on screen"),
               h("button", { type: "button", class: "danger small", onclick: () => { app.commit(); views.splice(i, 1); app.changed(false); draw(); } }, "Delete"))))))));
       };
-      el.append(h("p", { class: "hint" }, "A view keeps a stretch of chainage, a date range and which styles are hidden, so you can switch between the whole job and close-ups. Page layout chart blocks can each show a saved view. TurboChart charts come in as views."), box,
+      el.append(h("p", { class: "hint" }, "A view keeps a stretch of chainage, a date range and which styles are hidden, so you can switch between the whole job and close-ups. Page layout chart blocks can each show a saved view, so each sheet can have its own timescale. Set a time on From / To to frame a sheet to the hour (a possession, say); on screen the view opens on whole days. TurboChart charts come in as views."), box,
         h("div", { class: "row2" }, field("Name for the view on screen", h("input", { id: "sv-name", value: "View " + ((p.views || []).length + 1) })),
           h("div", { class: "btns", style: "align-self:end" }, h("button", { type: "button", onclick: () => { app.commit(); (p.views ||= []).push(currentView(p, $("#sv-name", el).value || "View")); app.changed(false); draw(); } }, "Save the current view"))));
       draw();
